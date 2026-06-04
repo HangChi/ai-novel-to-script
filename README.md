@@ -38,6 +38,56 @@ project/
 └── docker-compose.yml
 ```
 
+## 技术栈与第三方依赖
+
+当前框架采用前后端分离架构，MVP 阶段暂不引入数据库，也暂不接入 AI SDK。
+
+| 模块 | 技术或依赖 | 用途 |
+| --- | --- | --- |
+| 后端 | FastAPI | 提供 HTTP API 服务 |
+| 后端 | Uvicorn | 本地运行 ASGI 服务 |
+| 后端测试 | pytest | 运行后端自动化测试 |
+| 后端测试 | httpx | 支撑 FastAPI 测试客户端 |
+| 前端 | React | 构建交互界面 |
+| 前端 | React DOM | 将 React 应用挂载到浏览器 DOM |
+| 前端 | Vite | 前端开发服务器与构建工具 |
+| 前端 | TypeScript | 前端静态类型检查 |
+| 前端 | @vitejs/plugin-react | Vite 的 React 编译插件 |
+| 前端类型 | @types/react | React 的 TypeScript 类型声明 |
+| 前端类型 | @types/react-dom | React DOM 的 TypeScript 类型声明 |
+
+## 本地开发
+
+### 后端
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+.\.venv\Scripts\python -m pytest
+.\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
+```
+
+后端健康检查地址：
+
+```text
+http://127.0.0.1:8000/api/health
+```
+
+### 前端
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+前端默认地址：
+
+```text
+http://127.0.0.1:5173
+```
+
 ## 预期输入
 
 用户可以提供由多个章节组成的小说文本，例如：
@@ -89,4 +139,4 @@ script:
 
 ## 仓库状态
 
-当前仓库处于初始化阶段，已先建立文档、前端、后端、SQL 与部署配置目录。后续会逐步补充应用代码、示例输入输出和测试用例。
+当前仓库已建立文档、前端、后端、SQL 与部署配置目录，并搭建了基础前后端框架。后续会逐步补充章节解析、AI 生成、YAML 校验、示例输入输出和测试用例。
