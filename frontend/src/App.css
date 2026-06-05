@@ -136,6 +136,7 @@ h2 {
 
 .panel-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -149,9 +150,57 @@ h2 {
   padding: 8px 11px;
 }
 
+.generate-button {
+  min-width: 124px;
+  border: 1px solid #1f6f5d;
+  border-radius: 6px;
+  background: #1f6f5d;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 800;
+  padding: 10px 14px;
+}
+
+.generate-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .ghost-button:hover,
-.status-button:hover {
+.status-button:hover,
+.generate-button:hover {
   filter: brightness(0.97);
+}
+
+.title-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px 0;
+}
+
+.title-field span {
+  flex: 0 0 auto;
+  color: #5e6d80;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.title-field input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d8dee7;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1a2433;
+  font: 0.95rem/1.5 inherit;
+  outline: none;
+  padding: 10px 12px;
+}
+
+.title-field input:focus {
+  border-color: #3b6ea8;
+  box-shadow: 0 0 0 3px rgba(59, 110, 168, 0.12);
 }
 
 textarea,
@@ -172,6 +221,37 @@ textarea::placeholder {
   color: #98a5b3;
 }
 
+.panel-footer {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid #e6eaf0;
+  background: #fbfcfd;
+}
+
+.generation-message {
+  min-width: 0;
+  color: #66758a;
+  font-size: 0.88rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.generation-message.success {
+  color: #17663a;
+}
+
+.generation-message.error {
+  color: #a43c33;
+}
+
+.generation-message.generating {
+  color: #846118;
+}
+
 .input-panel {
   border-top: 4px solid #3b6ea8;
 }
@@ -189,6 +269,15 @@ textarea::placeholder {
   color: #27614f;
   font-weight: 800;
   padding: 5px 10px;
+}
+
+.yaml-preview {
+  overflow: auto;
+  background: #ffffff;
+}
+
+.yaml-editor {
+  background: #ffffff;
 }
 
 .status-pill {
@@ -259,6 +348,16 @@ textarea::placeholder {
   .panel-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .title-field,
+  .panel-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .generate-button {
+    width: 100%;
   }
 
   .editor-panel {

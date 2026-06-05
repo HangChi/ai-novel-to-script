@@ -3,8 +3,24 @@ import { useState } from "react";
 import "./App.css";
 
 type HealthStatus = "idle" | "checking" | "ok" | "error";
+type GenerationStatus = "idle" | "generating" | "success" | "error";
+type YamlMode = "preview" | "edit";
+
+type GenerateScriptResponse = {
+  status: "completed";
+  schema_version: string;
+  yaml: string;
+};
+
+type ApiErrorResponse = {
+  detail?: {
+    code?: string;
+    message?: string;
+  };
+};
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+const SAMPLE_TITLE = "雨夜来信";
 const SAMPLE_TEXT = "第 1 章 初遇\n林澈推门而入，雨水顺着衣角滴落。\n\n第 2 章 暗线\n苏晚在旧信封里发现陌生地址。\n\n第 3 章 选择\n两人在清晨的站台前做出决定。";
 const INITIAL_YAML = 'script:\n  schema_version: "0.1.0"\n  title: ""\n  scenes: []\n';
 
@@ -14,14 +30,39 @@ function countLikelyChapters(text: string) {
   return matches?.length ?? 0;
 }
 
+async function readJsonSafely(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
+
+function getApiErrorMessage(payload: unknown) {
+  const errorPayload = payload as ApiErrorResponse;
+  const code = errorPayload.detail?.code;
+  const message = errorPayload.detail?.message;
+
+  if (code && message) {
+    return `${code}: ${message}`;
+  }
+
+  return "生成失败，请检查后端服务和输入内容。";
+}
+
 function App() {
   const [healthStatus, setHealthStatus] = useState<HealthStatus>("idle");
   const [healthMessage, setHealthMessage] = useState("未检测");
+  const [generationStatus, setGenerationStatus] = useState<GenerationStatus>("idle");
+  const [generationMessage, setGenerationMessage] = useState("待生成");
+  const [yamlMode, setYamlMode] = useState<YamlMode>("preview");
+  const [scriptTitle, setScriptTitle] = useState(SAMPLE_TITLE);
   const [sourceText, setSourceText] = useState(SAMPLE_TEXT);
   const [yamlText, setYamlText] = useState(INITIAL_YAML);
 
   const characterCount = sourceText.trim().length;
   const chapterCount = countLikelyChapters(sourceText);
+  const isGenerating = generationStatus === "generating";
 
   async function checkBackend() {
     setHealthStatus("checking");
@@ -48,6 +89,40 @@ function App() {
     }
   }
 
+  async function generateScript() {
+    setGenerationStatus("generating");
+    setGenerationMessage("生成中");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/scripts/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: scriptTitle,
+          content: sourceText,
+          output_format: "yaml",
+        }),
+      });
+      const payload = await readJsonSafely(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(payload));
+      }
+
+      const result = payload as GenerateScriptResponse;
+
+      setYamlText(result.yaml);
+      setYamlMode("preview");
+      setGenerationStatus("success");
+      setGenerationMessage(`已生成 schema ${result.schema_version}`);
+    } catch (error) {
+      setGenerationStatus("error");
+      setGenerationMessage(error instanceof Error ? error.message : "生成失败，请稍后重试。");
+    }
+  }
+
   function downloadYaml() {
     const blob = new Blob([yamlText], { type: "application/x-yaml;charset=utf-8" });
     const downloadUrl = URL.createObjectURL(blob);
@@ -59,6 +134,20 @@ function App() {
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
+  }
+
+  function resetSourceText() {
+    setScriptTitle(SAMPLE_TITLE);
+    setSourceText(SAMPLE_TEXT);
+    setGenerationStatus("idle");
+    setGenerationMessage("待生成");
+  }
+
+  function resetYamlText() {
+    setYamlText(INITIAL_YAML);
+    setYamlMode("preview");
+    setGenerationStatus("idle");
+    setGenerationMessage("待生成");
   }
 
   return (
@@ -93,7 +182,7 @@ function App() {
           </div>
           <div className="metric-block">
             <span>状态</span>
-            <strong>{chapterCount >= 3 ? "可解析" : "待补全"}</strong>
+            <strong>{chapterCount >= 3 ? "可生成" : "待补全"}</strong>
           </div>
         </aside>
 
@@ -104,7 +193,7 @@ function App() {
               <h2>小说文本</h2>
             </div>
             <div className="panel-actions">
-              <button className="ghost-button" type="button" onClick={() => setSourceText(SAMPLE_TEXT)}>
+              <button className="ghost-button" type="button" onClick={resetSourceText}>
                 示例
               </button>
               <button className="ghost-button" type="button" onClick={() => setSourceText("")}>
@@ -112,12 +201,27 @@ function App() {
               </button>
             </div>
           </div>
+          <label className="title-field">
+            <span>剧本标题</span>
+            <input
+              aria-label="剧本标题"
+              value={scriptTitle}
+              onChange={(event) => setScriptTitle(event.target.value)}
+              placeholder="未命名剧本"
+            />
+          </label>
           <textarea
             aria-label="小说文本输入"
             value={sourceText}
             onChange={(event) => setSourceText(event.target.value)}
             placeholder={"第 1 章 ...\n\n第 2 章 ...\n\n第 3 章 ..."}
           />
+          <div className="panel-footer">
+            <span className={`generation-message ${generationStatus}`}>{generationMessage}</span>
+            <button className="generate-button" type="button" onClick={generateScript} disabled={isGenerating}>
+              {isGenerating ? "生成中..." : "生成 YAML"}
+            </button>
+          </div>
         </section>
 
         <section className="editor-panel output-panel">
@@ -128,7 +232,10 @@ function App() {
             </div>
             <div className="panel-actions">
               <span className="schema-badge">schema 0.1.0</span>
-              <button className="ghost-button" type="button" onClick={() => setYamlText(INITIAL_YAML)}>
+              <button className="ghost-button" type="button" onClick={() => setYamlMode(yamlMode === "preview" ? "edit" : "preview")}>
+                {yamlMode === "preview" ? "在线编辑" : "完成编辑"}
+              </button>
+              <button className="ghost-button" type="button" onClick={resetYamlText}>
                 重置
               </button>
               <button className="ghost-button" type="button" onClick={downloadYaml}>
@@ -136,12 +243,19 @@ function App() {
               </button>
             </div>
           </div>
-          <textarea
-            aria-label="剧本 YAML 编辑器"
-            value={yamlText}
-            onChange={(event) => setYamlText(event.target.value)}
-            spellCheck={false}
-          />
+          {yamlMode === "preview" ? (
+            <pre className="yaml-preview" aria-label="剧本 YAML 预览">
+              {yamlText}
+            </pre>
+          ) : (
+            <textarea
+              className="yaml-editor"
+              aria-label="剧本 YAML 编辑器"
+              value={yamlText}
+              onChange={(event) => setYamlText(event.target.value)}
+              spellCheck={false}
+            />
+          )}
         </section>
       </main>
     </div>
