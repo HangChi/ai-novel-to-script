@@ -1,7 +1,7 @@
 script:
   schema_version: 0.1.0
   title: 雨夜来信
-  logline: ''
+  logline: 'TBD: add a one-sentence story logline'
   source:
     type: novel
     chapters_count: 3
@@ -14,8 +14,8 @@ script:
     - id: scene-001
       title: 第 1 章 初遇
       source_chapter: 第 1 章 初遇
-      location: ''
-      time: ''
+      location: TBD
+      time: TBD
       characters: []
       beats:
         - type: narration
@@ -23,8 +23,8 @@ script:
     - id: scene-002
       title: 第 2 章 暗线
       source_chapter: 第 2 章 暗线
-      location: ''
-      time: ''
+      location: TBD
+      time: TBD
       characters: []
       beats:
         - type: narration
@@ -32,8 +32,8 @@ script:
     - id: scene-003
       title: 第 3 章 选择
       source_chapter: 第 3 章 选择
-      location: ''
-      time: ''
+      location: TBD
+      time: TBD
       characters: []
       beats:
         - type: narration
