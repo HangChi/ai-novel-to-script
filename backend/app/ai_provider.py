@@ -11,11 +11,23 @@ from app.script_validator import validate_script_yaml
 
 SYSTEM_PROMPT = """You are an AI script adaptation assistant.
 Convert the provided YAML skeleton into a polished screenplay draft YAML.
-Return YAML only.
-Keep the top-level `script` object and schema_version `0.1.0`.
-Use only beat types: action, dialogue, narration, transition.
-Preserve source traceability through source_chapter.
-Do not invent unrelated plot events.
+Return YAML only, without Markdown fences or commentary.
+
+Schema rules:
+- Keep the top-level `script` object and schema_version `0.1.0`.
+- Preserve `source.type`, `source.chapters_count`, and `source.chapter_titles`.
+- Preserve every scene's `source_chapter` traceability.
+- Use only beat types: action, dialogue, narration, transition.
+- Dialogue beats must include a character string.
+
+Adaptation requirements:
+- Fill `script.logline` with one concise sentence.
+- Populate `script.characters` with the main characters found in the source text.
+- Give each character a stable id such as `char-001`, name, role, and short description.
+- Convert chapter narration into screenplay scenes with useful titles, location, and time values.
+- Split scene content into ordered beats for visible action, dialogue, necessary narration, and transitions.
+- Keep the plot faithful to the provided source text and do not invent unrelated events.
+- Prefer concrete, editable screenplay language over literary summary.
 """
 
 
@@ -60,13 +72,7 @@ class OpenAICompatibleScriptAIProvider:
                 },
                 {
                     "role": "user",
-                    "content": (
-                        f"Title: {title or 'Untitled Script'}\n\n"
-                        "Rewrite this screenplay YAML skeleton into an editable first draft.\n\n"
-                        "```yaml\n"
-                        f"{skeleton_yaml}"
-                        "```"
-                    ),
+                    "content": _build_rewrite_prompt(title=title, skeleton_yaml=skeleton_yaml),
                 },
             ],
         }
@@ -109,6 +115,24 @@ class OpenAICompatibleScriptAIProvider:
             raise AIProviderError("AI provider returned empty content.")
 
         return content
+
+
+def _build_rewrite_prompt(title: str, skeleton_yaml: str) -> str:
+    script_title = title.strip() or "Untitled Script"
+
+    return (
+        f"Title: {script_title}\n\n"
+        "Rewrite this screenplay YAML skeleton into an editable first draft.\n"
+        "Use the skeleton as the source of truth for structure and traceability.\n\n"
+        "Before returning, check that the YAML includes:\n"
+        "- script.logline\n"
+        "- script.characters with ids, names, roles, and descriptions\n"
+        "- scenes with location, time, characters, and source_chapter\n"
+        "- ordered beats using action, dialogue, narration, or transition only\n\n"
+        "```yaml\n"
+        f"{skeleton_yaml}"
+        "```"
+    )
 
 
 def _strip_markdown_fence(content: str) -> str:
