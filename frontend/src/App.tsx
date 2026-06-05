@@ -6,7 +6,7 @@ type HealthStatus = "idle" | "checking" | "ok" | "error";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const SAMPLE_TEXT = "第 1 章 初遇\n林澈推门而入，雨水顺着衣角滴落。\n\n第 2 章 暗线\n苏晚在旧信封里发现陌生地址。\n\n第 3 章 选择\n两人在清晨的站台前做出决定。";
-const YAML_PREVIEW = 'script:\n  schema_version: "0.1.0"\n  title: ""\n  scenes: []\n';
+const INITIAL_YAML = 'script:\n  schema_version: "0.1.0"\n  title: ""\n  scenes: []\n';
 
 function countLikelyChapters(text: string) {
   const matches = text.match(/^\s*(?:#{1,6}\s+)?(?:第\s*(?:\d+|[零〇一二两三四五六七八九十百千万]+)\s*[章节回话]|chapter\s+\d+|\d+\s*[.．、]\s*\S)/gim);
@@ -18,6 +18,7 @@ function App() {
   const [healthStatus, setHealthStatus] = useState<HealthStatus>("idle");
   const [healthMessage, setHealthMessage] = useState("未检测");
   const [sourceText, setSourceText] = useState(SAMPLE_TEXT);
+  const [yamlText, setYamlText] = useState(INITIAL_YAML);
 
   const characterCount = sourceText.trim().length;
   const chapterCount = countLikelyChapters(sourceText);
@@ -48,7 +49,7 @@ function App() {
   }
 
   function downloadYaml() {
-    const blob = new Blob([YAML_PREVIEW], { type: "application/x-yaml;charset=utf-8" });
+    const blob = new Blob([yamlText], { type: "application/x-yaml;charset=utf-8" });
     const downloadUrl = URL.createObjectURL(blob);
     const link = document.createElement("a");
 
@@ -127,12 +128,20 @@ function App() {
             </div>
             <div className="panel-actions">
               <span className="schema-badge">schema 0.1.0</span>
+              <button className="ghost-button" type="button" onClick={() => setYamlText(INITIAL_YAML)}>
+                重置
+              </button>
               <button className="ghost-button" type="button" onClick={downloadYaml}>
                 下载 YAML
               </button>
             </div>
           </div>
-          <pre>{YAML_PREVIEW}</pre>
+          <textarea
+            aria-label="剧本 YAML 编辑器"
+            value={yamlText}
+            onChange={(event) => setYamlText(event.target.value)}
+            spellCheck={false}
+          />
         </section>
       </main>
     </div>
