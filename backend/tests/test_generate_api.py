@@ -1,6 +1,7 @@
 import yaml
 from fastapi.testclient import TestClient
 
+from app.ai_provider import AIProviderError
 from app.main import app
 
 
@@ -91,4 +92,26 @@ def test_generate_script_rejects_unsupported_output_format() -> None:
     assert response.json()["detail"] == {
         "code": "INVALID_INPUT",
         "message": "output_format currently only supports yaml.",
+    }
+
+
+def test_generate_script_reports_ai_provider_failure(monkeypatch) -> None:
+    def fail_generation(title: str, skeleton_yaml: str) -> str:
+        raise AIProviderError("provider unavailable")
+
+    monkeypatch.setattr("app.main.generate_script_with_ai", fail_generation)
+
+    response = client.post(
+        "/api/scripts/generate",
+        json={
+            "title": "Rain Letter",
+            "content": _novel_text(),
+            "output_format": "yaml",
+        },
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == {
+        "code": "AI_GENERATION_FAILED",
+        "message": "provider unavailable",
     }

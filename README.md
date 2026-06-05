@@ -40,7 +40,7 @@ project/
 
 ## 技术栈与第三方依赖
 
-当前框架采用前后端分离架构，MVP 阶段暂不引入数据库，也暂不接入 AI SDK。
+当前框架采用前后端分离架构，MVP 阶段暂不引入数据库。AI Provider 使用可配置的运行时服务调用，当前不引入 AI SDK。
 
 | 模块 | 技术或依赖 | 用途 |
 | --- | --- | --- |
@@ -73,6 +73,30 @@ python -m venv .venv
 
 ```text
 http://127.0.0.1:8000/api/health
+```
+
+#### AI Provider 配置
+
+默认配置不需要密钥：
+
+```powershell
+$env:AI_PROVIDER="local"
+```
+
+`local` 模式会返回稳定的 YAML 骨架，适合本地开发和测试。启用 OpenAI-compatible Provider 时，需要配置：
+
+```powershell
+$env:AI_PROVIDER="openai"
+$env:OPENAI_API_KEY="你的 API Key"
+$env:OPENAI_MODEL="你的模型名称"
+$env:OPENAI_BASE_URL="https://api.openai.com/v1"
+```
+
+可选配置：
+
+```powershell
+$env:OPENAI_TEMPERATURE="0.3"
+$env:AI_PROVIDER_TIMEOUT_SECONDS="60"
 ```
 
 ### 前端
@@ -140,4 +164,4 @@ script:
 
 ## 仓库状态
 
-当前仓库已建立文档、前端、后端、SQL 与部署配置目录，并搭建了基础前后端框架、章节解析、剧本 YAML 初稿骨架、生成接口、YAML 校验接口和前端 YAML 预览编辑下载能力。后续会逐步补充 AI 生成、示例输入输出和测试用例。
+当前仓库已建立文档、前端、后端、SQL 与部署配置目录，并搭建了基础前后端框架、章节解析、剧本 YAML 初稿骨架、生成接口、YAML 校验接口、AI Provider 和前端 YAML 预览编辑下载能力。后续会逐步补充更完整的 AI 改编提示词、示例输入输出和测试用例。
