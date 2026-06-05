@@ -150,6 +150,11 @@ h2 {
   padding: 8px 11px;
 }
 
+.ghost-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .generate-button {
   min-width: 124px;
   border: 1px solid #1f6f5d;
@@ -280,6 +285,81 @@ textarea::placeholder {
   background: #ffffff;
 }
 
+.validation-panel {
+  border-top: 1px solid #e6eaf0;
+  background: #fbfcfd;
+  padding: 12px 18px;
+}
+
+.validation-panel.valid {
+  background: #f2faf6;
+}
+
+.validation-panel.invalid,
+.validation-panel.error {
+  background: #fff6f5;
+}
+
+.validation-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.validation-summary strong {
+  color: #314156;
+  font-size: 0.88rem;
+}
+
+.validation-summary span {
+  color: #66758a;
+  font-size: 0.86rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.validation-panel.valid .validation-summary span {
+  color: #17663a;
+}
+
+.validation-panel.invalid .validation-summary span,
+.validation-panel.error .validation-summary span {
+  color: #a43c33;
+}
+
+.validation-errors {
+  display: grid;
+  gap: 8px;
+  max-height: 138px;
+  overflow: auto;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.validation-errors li {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid #f0d0cb;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 8px 10px;
+}
+
+.validation-errors code {
+  color: #8a342c;
+  font: 0.78rem/1.5 "Consolas", "Courier New", monospace;
+  overflow-wrap: anywhere;
+}
+
+.validation-errors span {
+  color: #5f3230;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
 .status-pill {
   display: inline-flex;
   min-width: 88px;
@@ -358,6 +438,15 @@ textarea::placeholder {
 
   .generate-button {
     width: 100%;
+  }
+
+  .validation-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .validation-errors li {
+    grid-template-columns: 1fr;
   }
 
   .editor-panel {
