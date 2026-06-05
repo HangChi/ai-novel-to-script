@@ -164,6 +164,35 @@ script:
 
 本地启动前后端后，可在前端导入示例文本，点击“生成 YAML”，再使用“校验 YAML”“复制 YAML”或“下载 YAML”验证完整流程。
 
+## 评委复现流程
+
+### 一键启动
+
+在项目根目录运行：
+
+```powershell
+.\scripts\start-local-demo.ps1
+```
+
+脚本会复用或启动：
+
+- 后端 API：`http://127.0.0.1:8000`
+- 前端工作台：`http://127.0.0.1:5173`
+
+也可以附带运行烟测：
+
+```powershell
+.\scripts\start-local-demo.ps1 -RunSmoke
+```
+
+### 页面演示
+
+1. 打开 `http://127.0.0.1:5173`。
+2. 点击“导入文件”，选择 `docs/examples/rain-letter-novel.txt`。
+3. 点击“生成 YAML”。
+4. 点击“校验 YAML”，确认显示“YAML 结构有效”。
+5. 点击“复制 YAML”或“下载 YAML”，验证当前剧本内容可以导出。
+
 ## 初始开发计划
 
 1. 定义剧本 YAML Schema 文档。
