@@ -1,7 +1,13 @@
 import yaml
 
 from app.chapter_parser import parse_novel_chapters
-from app.script_draft import build_script_draft, build_script_yaml, dump_script_draft_yaml
+from app.script_draft import (
+    DEFAULT_LOGLINE_PLACEHOLDER,
+    DEFAULT_SCENE_FIELD_PLACEHOLDER,
+    build_script_draft,
+    build_script_yaml,
+    dump_script_draft_yaml,
+)
 
 
 def _chapters():
@@ -23,6 +29,7 @@ def test_build_script_draft_from_chapters() -> None:
     draft = build_script_draft(title="雨夜来信", chapters=_chapters())
 
     assert draft.schema_version == "0.1.0"
+    assert draft.logline == DEFAULT_LOGLINE_PLACEHOLDER
     assert draft.title == "雨夜来信"
     assert draft.source.type == "novel"
     assert draft.source.chapters_count == 3
@@ -55,6 +62,7 @@ def test_dump_script_draft_yaml_matches_schema_shape() -> None:
         "characters",
         "scenes",
     ]
+    assert payload["script"]["logline"] == DEFAULT_LOGLINE_PLACEHOLDER
     assert payload["script"]["source"] == {
         "type": "novel",
         "chapters_count": 3,
@@ -64,8 +72,8 @@ def test_dump_script_draft_yaml_matches_schema_shape() -> None:
         "id": "scene-001",
         "title": "第一章 初遇",
         "source_chapter": "第一章 初遇",
-        "location": "",
-        "time": "",
+        "location": DEFAULT_SCENE_FIELD_PLACEHOLDER,
+        "time": DEFAULT_SCENE_FIELD_PLACEHOLDER,
         "characters": [],
         "beats": [
             {

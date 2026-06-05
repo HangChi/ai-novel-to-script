@@ -19,6 +19,8 @@ script:
   scenes: []
 ```
 
+`local` provider still emits the same Schema shape. For draft readability, generated placeholders use `TBD: add a one-sentence story logline` for `script.logline` and `TBD` for each scene's `location` and `time`.
+
 ## 字段说明
 
 ### script

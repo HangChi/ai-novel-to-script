@@ -8,6 +8,8 @@ import yaml
 from app.chapter_parser import Chapter
 
 SCHEMA_VERSION = "0.1.0"
+DEFAULT_LOGLINE_PLACEHOLDER = "TBD: add a one-sentence story logline"
+DEFAULT_SCENE_FIELD_PLACEHOLDER = "TBD"
 
 BeatType = Literal["action", "dialogue", "narration", "transition"]
 
@@ -100,7 +102,7 @@ def build_script_draft(title: str, chapters: list[Chapter]) -> ScriptDraft:
     return ScriptDraft(
         schema_version=SCHEMA_VERSION,
         title=script_title,
-        logline="",
+        logline=DEFAULT_LOGLINE_PLACEHOLDER,
         source=ScriptSource(
             type="novel",
             chapters_count=len(chapters),
@@ -112,6 +114,8 @@ def build_script_draft(title: str, chapters: list[Chapter]) -> ScriptDraft:
                 id=f"scene-{chapter.index:03d}",
                 title=chapter.title,
                 source_chapter=chapter.title,
+                location=DEFAULT_SCENE_FIELD_PLACEHOLDER,
+                time=DEFAULT_SCENE_FIELD_PLACEHOLDER,
                 beats=[
                     Beat(
                         type="narration",
