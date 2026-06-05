@@ -3,6 +3,7 @@ from typing import Any, NoReturn
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.ai_provider import AIProviderError, generate_script_with_ai
 from app.chapter_parser import ChapterParseError, parse_novel_chapters
 from app.script_draft import SCHEMA_VERSION, build_script_yaml
 from app.script_validator import validate_script_yaml
@@ -33,14 +34,18 @@ def read_health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-def _bad_request(code: str, message: str) -> NoReturn:
+def _api_error(status_code: int, code: str, message: str) -> NoReturn:
     raise HTTPException(
-        status_code=400,
+        status_code=status_code,
         detail={
             "code": code,
             "message": message,
         },
     )
+
+
+def _bad_request(code: str, message: str) -> NoReturn:
+    _api_error(400, code, message)
 
 
 def _read_text_field(payload: dict[str, Any], field_name: str, default: str = "") -> str:
@@ -66,10 +71,17 @@ def generate_script(payload: dict[str, Any] = Body(...)) -> dict[str, str]:
     except ChapterParseError as error:
         _bad_request(error.code, error.message)
 
+    skeleton_yaml = build_script_yaml(title=title, chapters=chapters)
+
+    try:
+        yaml_text = generate_script_with_ai(title=title, skeleton_yaml=skeleton_yaml)
+    except AIProviderError as error:
+        _api_error(502, "AI_GENERATION_FAILED", str(error))
+
     return {
         "status": "completed",
         "schema_version": SCHEMA_VERSION,
-        "yaml": build_script_yaml(title=title, chapters=chapters),
+        "yaml": yaml_text,
     }
 
 
