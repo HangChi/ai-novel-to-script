@@ -5,6 +5,7 @@ import "./App.css";
 type HealthStatus = "idle" | "checking" | "ok" | "error";
 type GenerationStatus = "idle" | "generating" | "success" | "error";
 type ValidationStatus = "idle" | "validating" | "valid" | "invalid" | "error";
+type CopyStatus = "idle" | "copying" | "copied" | "error";
 type YamlMode = "preview" | "edit";
 
 type GenerateScriptResponse = {
@@ -70,6 +71,7 @@ function App() {
   const [validationStatus, setValidationStatus] = useState<ValidationStatus>("idle");
   const [validationMessage, setValidationMessage] = useState("待校验");
   const [validationErrors, setValidationErrors] = useState<ScriptValidationError[]>([]);
+  const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
   const [yamlMode, setYamlMode] = useState<YamlMode>("preview");
   const [scriptTitle, setScriptTitle] = useState(SAMPLE_TITLE);
   const [sourceText, setSourceText] = useState(SAMPLE_TEXT);
@@ -79,6 +81,8 @@ function App() {
   const chapterCount = countLikelyChapters(sourceText);
   const isGenerating = generationStatus === "generating";
   const isValidating = validationStatus === "validating";
+  const isCopying = copyStatus === "copying";
+  const copyButtonLabel = copyStatus === "copied" ? "已复制" : copyStatus === "error" ? "复制失败" : "复制 YAML";
 
   function resetValidationState(message = "待校验") {
     setValidationStatus("idle");
@@ -89,6 +93,7 @@ function App() {
   function updateYamlText(nextYamlText: string) {
     setYamlText(nextYamlText);
     resetValidationState("YAML 已修改，待校验");
+    setCopyStatus("idle");
   }
 
   async function checkBackend() {
@@ -120,6 +125,7 @@ function App() {
     setGenerationStatus("generating");
     setGenerationMessage("生成中");
     resetValidationState("生成中，待校验");
+    setCopyStatus("idle");
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/scripts/generate`, {
@@ -190,6 +196,22 @@ function App() {
       setValidationStatus("error");
       setValidationMessage(error instanceof Error ? error.message : "校验失败，请稍后重试。");
       setValidationErrors([]);
+    }
+  }
+
+  async function copyYaml() {
+    setCopyStatus("copying");
+
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard is unavailable.");
+      }
+
+      await navigator.clipboard.writeText(yamlText);
+      setCopyStatus("copied");
+      window.setTimeout(() => setCopyStatus("idle"), 1600);
+    } catch {
+      setCopyStatus("error");
     }
   }
 
@@ -308,6 +330,9 @@ function App() {
               </button>
               <button className="ghost-button" type="button" onClick={validateYaml} disabled={isValidating}>
                 {isValidating ? "校验中..." : "校验 YAML"}
+              </button>
+              <button className="ghost-button" type="button" onClick={copyYaml} disabled={isCopying}>
+                {isCopying ? "复制中..." : copyButtonLabel}
               </button>
               <button className="ghost-button" type="button" onClick={resetYamlText}>
                 重置
