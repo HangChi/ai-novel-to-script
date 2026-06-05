@@ -6,6 +6,7 @@ type HealthStatus = "idle" | "checking" | "ok" | "error";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const SAMPLE_TEXT = "第 1 章 初遇\n林澈推门而入，雨水顺着衣角滴落。\n\n第 2 章 暗线\n苏晚在旧信封里发现陌生地址。\n\n第 3 章 选择\n两人在清晨的站台前做出决定。";
+const YAML_PREVIEW = 'script:\n  schema_version: "0.1.0"\n  title: ""\n  scenes: []\n';
 
 function countLikelyChapters(text: string) {
   const matches = text.match(/^\s*(?:#{1,6}\s+)?(?:第\s*(?:\d+|[零〇一二两三四五六七八九十百千万]+)\s*[章节回话]|chapter\s+\d+|\d+\s*[.．、]\s*\S)/gim);
@@ -44,6 +45,19 @@ function App() {
       setHealthStatus("error");
       setHealthMessage("未连接");
     }
+  }
+
+  function downloadYaml() {
+    const blob = new Blob([YAML_PREVIEW], { type: "application/x-yaml;charset=utf-8" });
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = downloadUrl;
+    link.download = "script-draft.yaml";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
   }
 
   return (
@@ -111,9 +125,14 @@ function App() {
               <p className="panel-kicker">Preview</p>
               <h2>剧本 YAML</h2>
             </div>
-            <span className="schema-badge">schema 0.1.0</span>
+            <div className="panel-actions">
+              <span className="schema-badge">schema 0.1.0</span>
+              <button className="ghost-button" type="button" onClick={downloadYaml}>
+                下载 YAML
+              </button>
+            </div>
           </div>
-          <pre>{'script:\n  schema_version: "0.1.0"\n  title: ""\n  scenes: []'}</pre>
+          <pre>{YAML_PREVIEW}</pre>
         </section>
       </main>
     </div>

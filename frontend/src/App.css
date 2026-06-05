@@ -182,6 +182,8 @@ textarea::placeholder {
 }
 
 .schema-badge {
+  display: inline-flex;
+  align-items: center;
   border-radius: 999px;
   background: #e7f2ee;
   color: #27614f;
@@ -252,6 +254,11 @@ textarea::placeholder {
 
   .metric-block strong {
     font-size: 1.2rem;
+  }
+
+  .panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .editor-panel {
