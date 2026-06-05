@@ -1,5 +1,10 @@
-from fastapi import FastAPI
+from typing import Any, NoReturn
+
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.chapter_parser import ChapterParseError, parse_novel_chapters
+from app.script_draft import SCHEMA_VERSION, build_script_yaml
 
 FRONTEND_DEV_ORIGINS = [
     "http://localhost:5173",
@@ -25,3 +30,43 @@ app.add_middleware(
 @app.get("/api/health", tags=["system"])
 def read_health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+def _bad_request(code: str, message: str) -> NoReturn:
+    raise HTTPException(
+        status_code=400,
+        detail={
+            "code": code,
+            "message": message,
+        },
+    )
+
+
+def _read_text_field(payload: dict[str, Any], field_name: str, default: str = "") -> str:
+    value = payload.get(field_name, default)
+
+    if not isinstance(value, str):
+        _bad_request("INVALID_INPUT", f"{field_name} must be a string.")
+
+    return value
+
+
+@app.post("/api/scripts/generate", tags=["scripts"])
+def generate_script(payload: dict[str, Any] = Body(...)) -> dict[str, str]:
+    title = _read_text_field(payload, "title")
+    content = _read_text_field(payload, "content")
+    output_format = _read_text_field(payload, "output_format", "yaml")
+
+    if output_format != "yaml":
+        _bad_request("INVALID_INPUT", "output_format currently only supports yaml.")
+
+    try:
+        chapters = parse_novel_chapters(content)
+    except ChapterParseError as error:
+        _bad_request(error.code, error.message)
+
+    return {
+        "status": "completed",
+        "schema_version": SCHEMA_VERSION,
+        "yaml": build_script_yaml(title=title, chapters=chapters),
+    }
