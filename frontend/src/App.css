@@ -1,0 +1,154 @@
+.app-shell {
+  min-height: 100vh;
+  background: #f6f7f9;
+  color: #1d2430;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 36px 20px;
+  border-bottom: 1px solid #dfe3e8;
+  background: #ffffff;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #596579;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+h1 {
+  font-size: 1.75rem;
+}
+
+h2 {
+  font-size: 1rem;
+}
+
+.status-button {
+  min-width: 112px;
+  border: 1px solid #1d2430;
+  border-radius: 6px;
+  background: #1d2430;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 10px 14px;
+}
+
+.status-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  padding: 24px 36px 36px;
+}
+
+.editor-panel {
+  display: flex;
+  min-height: calc(100vh - 156px);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.panel-heading {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e8ebef;
+}
+
+.panel-heading span {
+  color: #687386;
+  font-size: 0.86rem;
+}
+
+textarea,
+pre {
+  flex: 1;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: #1d2430;
+  font: 0.95rem/1.7 "Consolas", "Courier New", monospace;
+  outline: none;
+  padding: 18px;
+  resize: none;
+  white-space: pre-wrap;
+}
+
+.output-panel {
+  background: #fbfbfc;
+}
+
+.status-pill {
+  display: inline-flex;
+  min-width: 88px;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #edf0f3;
+  color: #596579;
+  font-weight: 700;
+}
+
+.status-pill.ok {
+  background: #e6f4ed;
+  color: #17663a;
+}
+
+.status-pill.error {
+  background: #fdeceb;
+  color: #a43c33;
+}
+
+.status-pill.checking {
+  background: #fff3d9;
+  color: #846118;
+}
+
+@media (max-width: 860px) {
+  .topbar {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 22px 18px 18px;
+  }
+
+  .status-button {
+    width: 100%;
+  }
+
+  h1 {
+    font-size: 1.45rem;
+  }
+
+  .workspace-grid {
+    grid-template-columns: 1fr;
+    padding: 18px;
+  }
+
+  .editor-panel {
+    min-height: 420px;
+  }
+}
