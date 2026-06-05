@@ -41,6 +41,7 @@ pnpm-debug.log*
 build/
 dist/
 .cache/
+.vite/
 .parcel-cache/
 .next/
 out/
