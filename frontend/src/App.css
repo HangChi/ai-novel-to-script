@@ -155,6 +155,21 @@ h2 {
   opacity: 0.68;
 }
 
+.file-import-button {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.file-import-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .generate-button {
   min-width: 124px;
   border: 1px solid #1f6f5d;
@@ -253,7 +268,8 @@ textarea::placeholder {
   color: #a43c33;
 }
 
-.generation-message.generating {
+.generation-message.generating,
+.generation-message.importing {
   color: #846118;
 }
 
@@ -438,6 +454,10 @@ textarea::placeholder {
 
   .generate-button {
     width: 100%;
+  }
+
+  .file-import-button {
+    justify-content: center;
   }
 
   .validation-summary {

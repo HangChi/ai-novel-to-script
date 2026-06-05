@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { type ChangeEvent, useState } from "react";
 
 import "./App.css";
 
 type HealthStatus = "idle" | "checking" | "ok" | "error";
 type GenerationStatus = "idle" | "generating" | "success" | "error";
+type ImportStatus = "idle" | "importing" | "success" | "error";
 type ValidationStatus = "idle" | "validating" | "valid" | "invalid" | "error";
 type CopyStatus = "idle" | "copying" | "copied" | "error";
 type YamlMode = "preview" | "edit";
@@ -63,11 +64,19 @@ function getApiErrorMessage(payload: unknown) {
   return "生成失败，请检查后端服务和输入内容。";
 }
 
+function getFileTitle(fileName: string) {
+  const title = fileName.replace(/\.(?:txt|md|markdown)$/i, "").trim();
+
+  return title || "未命名剧本";
+}
+
 function App() {
   const [healthStatus, setHealthStatus] = useState<HealthStatus>("idle");
   const [healthMessage, setHealthMessage] = useState("未检测");
   const [generationStatus, setGenerationStatus] = useState<GenerationStatus>("idle");
   const [generationMessage, setGenerationMessage] = useState("待生成");
+  const [importStatus, setImportStatus] = useState<ImportStatus>("idle");
+  const [importMessage, setImportMessage] = useState("");
   const [validationStatus, setValidationStatus] = useState<ValidationStatus>("idle");
   const [validationMessage, setValidationMessage] = useState("待校验");
   const [validationErrors, setValidationErrors] = useState<ScriptValidationError[]>([]);
@@ -82,6 +91,8 @@ function App() {
   const isGenerating = generationStatus === "generating";
   const isValidating = validationStatus === "validating";
   const isCopying = copyStatus === "copying";
+  const inputMessage = importStatus === "idle" ? generationMessage : importMessage;
+  const inputMessageStatus = importStatus === "idle" ? generationStatus : importStatus;
   const copyButtonLabel = copyStatus === "copied" ? "已复制" : copyStatus === "error" ? "复制失败" : "复制 YAML";
 
   function resetValidationState(message = "待校验") {
@@ -124,6 +135,7 @@ function App() {
   async function generateScript() {
     setGenerationStatus("generating");
     setGenerationMessage("生成中");
+    setImportStatus("idle");
     resetValidationState("生成中，待校验");
     setCopyStatus("idle");
 
@@ -233,6 +245,8 @@ function App() {
     setSourceText(SAMPLE_TEXT);
     setGenerationStatus("idle");
     setGenerationMessage("待生成");
+    setImportStatus("idle");
+    setImportMessage("");
   }
 
   function resetYamlText() {
@@ -241,6 +255,40 @@ function App() {
     setGenerationStatus("idle");
     setGenerationMessage("待生成");
     setValidationMessage("已重置，待校验");
+  }
+
+  async function importSourceFile(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    setImportStatus("importing");
+    setImportMessage("导入中");
+
+    try {
+      const text = await file.text();
+
+      if (!text.trim()) {
+        throw new Error("文件内容不能为空。");
+      }
+
+      setScriptTitle(getFileTitle(file.name));
+      setSourceText(text);
+      setGenerationStatus("idle");
+      setGenerationMessage("待生成");
+      setImportStatus("success");
+      setImportMessage(`已导入 ${file.name}`);
+      resetValidationState("导入新文本后待生成");
+      setCopyStatus("idle");
+    } catch (error) {
+      setImportStatus("error");
+      setImportMessage(error instanceof Error ? error.message : "导入失败，请选择文本文件。");
+    } finally {
+      input.value = "";
+    }
   }
 
   return (
@@ -286,10 +334,26 @@ function App() {
               <h2>小说文本</h2>
             </div>
             <div className="panel-actions">
+              <label className="ghost-button file-import-button">
+                导入文件
+                <input
+                  type="file"
+                  accept=".txt,.md,text/plain,text/markdown"
+                  onChange={importSourceFile}
+                />
+              </label>
               <button className="ghost-button" type="button" onClick={resetSourceText}>
                 示例
               </button>
-              <button className="ghost-button" type="button" onClick={() => setSourceText("")}>
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => {
+                  setSourceText("");
+                  setImportStatus("idle");
+                  setImportMessage("");
+                }}
+              >
                 清空
               </button>
             </div>
@@ -310,7 +374,7 @@ function App() {
             placeholder={"第 1 章 ...\n\n第 2 章 ...\n\n第 3 章 ..."}
           />
           <div className="panel-footer">
-            <span className={`generation-message ${generationStatus}`}>{generationMessage}</span>
+            <span className={`generation-message ${inputMessageStatus}`}>{inputMessage}</span>
             <button className="generate-button" type="button" onClick={generateScript} disabled={isGenerating}>
               {isGenerating ? "生成中..." : "生成 YAML"}
             </button>
