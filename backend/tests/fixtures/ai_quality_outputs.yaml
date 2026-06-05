@@ -1,0 +1,193 @@
+- id: noir_mystery
+  title: Rain Letter
+  output: |
+    script:
+      schema_version: 0.1.0
+      title: Rain Letter
+      logline: A reserved investigator follows a rain-soaked letter to a choice that exposes an old betrayal.
+      source:
+        type: novel
+        chapters_count: 3
+        chapter_titles:
+          - Chapter 1
+          - Chapter 2
+          - Chapter 3
+      characters:
+        - id: char-001
+          name: Lin
+          role: investigator
+          description: A quiet investigator who notices what others miss.
+        - id: char-002
+          name: Su
+          role: witness
+          description: A cautious witness carrying the last clue.
+      scenes:
+        - id: scene-001
+          title: The Wet Doorway
+          source_chapter: Chapter 1
+          location: Old teahouse entrance
+          time: Rainy evening
+          characters:
+            - Lin
+            - Su
+          beats:
+            - type: action
+              text: Lin pushes through the glass door while rain slides from his coat.
+            - type: dialogue
+              character: Su
+              text: You came earlier than the letter promised.
+        - id: scene-002
+          title: The Hidden Address
+          source_chapter: Chapter 2
+          location: Archive room
+          time: Night
+          characters:
+            - Lin
+          beats:
+            - type: narration
+              text: The letter points to an address erased from every public record.
+            - type: action
+              text: Lin folds the paper and pockets it before the lights flicker out.
+        - id: scene-003
+          title: Platform Choice
+          source_chapter: Chapter 3
+          location: Train platform
+          time: Dawn
+          characters:
+            - Lin
+            - Su
+          beats:
+            - type: dialogue
+              character: Lin
+              text: If we board, the truth leaves with us.
+            - type: transition
+              text: Cut to the first train entering the mist.
+- id: quiet_romance
+  title: Borrowed Spring
+  output: |
+    script:
+      schema_version: 0.1.0
+      title: Borrowed Spring
+      logline: Two neighbors restore a neglected rooftop garden and admit what they have been avoiding.
+      source:
+        type: novel
+        chapters_count: 3
+        chapter_titles:
+          - Chapter 1
+          - Chapter 2
+          - Chapter 3
+      characters:
+        - id: char-001
+          name: Mei
+          role: designer
+          description: A patient designer who expresses care through small repairs.
+        - id: char-002
+          name: Chen
+          role: musician
+          description: A blocked musician learning to stay.
+      scenes:
+        - id: scene-001
+          title: Seed Trays
+          source_chapter: Chapter 1
+          location: Apartment rooftop
+          time: Morning
+          characters:
+            - Mei
+            - Chen
+          beats:
+            - type: action
+              text: Mei sets cracked seed trays along the railing and tests the soil with her thumb.
+            - type: dialogue
+              character: Chen
+              text: I can water them, if you trust me with something alive.
+        - id: scene-002
+          title: Unplayed Song
+          source_chapter: Chapter 2
+          location: Chen's apartment
+          time: Late afternoon
+          characters:
+            - Chen
+          beats:
+            - type: narration
+              text: The unfinished melody repeats under the sound of rain on the window.
+            - type: action
+              text: Chen writes Mei's name beside the final chord.
+        - id: scene-003
+          title: First Bloom
+          source_chapter: Chapter 3
+          location: Rooftop garden
+          time: Sunset
+          characters:
+            - Mei
+            - Chen
+          beats:
+            - type: dialogue
+              character: Mei
+              text: You stayed long enough for the flowers to learn your schedule.
+            - type: transition
+              text: Fade out on the rooftop lights turning on.
+- id: speculative_thriller
+  title: Signal Garden
+  output: |
+    script:
+      schema_version: 0.1.0
+      title: Signal Garden
+      logline: A botanist discovers that a greenhouse signal is warning the city about tomorrow.
+      source:
+        type: novel
+        chapters_count: 3
+        chapter_titles:
+          - Chapter 1
+          - Chapter 2
+          - Chapter 3
+      characters:
+        - id: char-001
+          name: Ada
+          role: botanist
+          description: A field scientist who trusts evidence more than authority.
+        - id: char-002
+          name: Noor
+          role: systems engineer
+          description: The engineer maintaining the greenhouse sensor grid.
+      scenes:
+        - id: scene-001
+          title: Static in the Leaves
+          source_chapter: Chapter 1
+          location: Municipal greenhouse
+          time: Midnight
+          characters:
+            - Ada
+            - Noor
+          beats:
+            - type: action
+              text: Ada watches the vines pulse in time with the emergency broadcast.
+            - type: dialogue
+              character: Noor
+              text: Plants do not transmit warnings unless something taught them to.
+        - id: scene-002
+          title: Tomorrow's Map
+          source_chapter: Chapter 2
+          location: Sensor control room
+          time: Pre-dawn
+          characters:
+            - Ada
+            - Noor
+          beats:
+            - type: narration
+              text: The signal resolves into a city map with three blocks already marked dark.
+            - type: action
+              text: Noor disconnects the public feed before the alert can be buried.
+        - id: scene-003
+          title: Root Alarm
+          source_chapter: Chapter 3
+          location: Underground transit tunnel
+          time: Morning rush
+          characters:
+            - Ada
+            - Noor
+          beats:
+            - type: dialogue
+              character: Ada
+              text: If the roots predicted this, they can tell us where it starts.
+            - type: transition
+              text: Smash cut to commuters stopping as every station screen turns green.

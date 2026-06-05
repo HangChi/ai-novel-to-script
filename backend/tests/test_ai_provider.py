@@ -1,4 +1,7 @@
+from pathlib import Path
+
 import pytest
+import yaml
 
 from app.ai_provider import (
     AIProviderError,
@@ -8,6 +11,14 @@ from app.ai_provider import (
 )
 from app.chapter_parser import parse_novel_chapters
 from app.script_draft import build_script_yaml
+from app.script_validator import validate_script_yaml
+
+
+AI_QUALITY_FIXTURE_PATH = Path(__file__).parent / "fixtures" / "ai_quality_outputs.yaml"
+
+
+def _ai_quality_cases() -> list[dict[str, str]]:
+    return yaml.safe_load(AI_QUALITY_FIXTURE_PATH.read_text(encoding="utf-8"))
 
 
 def _valid_yaml() -> str:
@@ -72,6 +83,33 @@ def test_openai_provider_strips_fenced_yaml_and_validates(monkeypatch: pytest.Mo
     monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
 
     assert provider.generate_script_yaml("Rain Letter", "skeleton") == valid_yaml.strip()
+
+
+@pytest.mark.parametrize("case", _ai_quality_cases(), ids=lambda case: case["id"])
+def test_openai_provider_accepts_quality_fixture_outputs(monkeypatch: pytest.MonkeyPatch, case: dict[str, str]) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
+
+    def fake_request_completion(self, payload):
+        return case["output"]
+
+    monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
+
+    result = provider.generate_script_yaml(case["title"], _valid_yaml())
+    validation = validate_script_yaml(result)
+    script = yaml.safe_load(result)["script"]
+    beat_types = {
+        beat["type"]
+        for scene in script["scenes"]
+        for beat in scene["beats"]
+    }
+
+    assert validation.valid
+    assert script["title"] == case["title"]
+    assert script["logline"].strip()
+    assert script["characters"]
+    assert len(script["scenes"]) == script["source"]["chapters_count"]
+    assert {"action", "dialogue", "narration", "transition"}.issubset(beat_types)
+    assert all(scene["location"] != "TBD" and scene["time"] != "TBD" for scene in script["scenes"])
 
 
 def test_openai_provider_prompt_requests_complete_screenplay_fields(monkeypatch: pytest.MonkeyPatch) -> None:
