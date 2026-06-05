@@ -74,6 +74,32 @@ def test_openai_provider_strips_fenced_yaml_and_validates(monkeypatch: pytest.Mo
     assert provider.generate_script_yaml("Rain Letter", "skeleton") == valid_yaml.strip()
 
 
+def test_openai_provider_prompt_requests_complete_screenplay_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
+    captured_payload = {}
+
+    def fake_request_completion(self, payload):
+        captured_payload.update(payload)
+        return _valid_yaml()
+
+    monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
+
+    provider.generate_script_yaml("Rain Letter", _valid_yaml())
+
+    messages = captured_payload["messages"]
+    system_prompt = messages[0]["content"]
+    user_prompt = messages[1]["content"]
+
+    assert "script.logline" in system_prompt
+    assert "script.characters" in system_prompt
+    assert "location" in system_prompt
+    assert "dialogue" in system_prompt
+    assert "source_chapter" in system_prompt
+    assert "do not invent unrelated events" in system_prompt
+    assert "Title: Rain Letter" in user_prompt
+    assert "ordered beats" in user_prompt
+
+
 def test_openai_provider_rejects_invalid_yaml_response(monkeypatch: pytest.MonkeyPatch) -> None:
     provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
 
