@@ -337,6 +337,7 @@ function App() {
               <label className="ghost-button file-import-button">
                 导入文件
                 <input
+                  data-testid="source-file-input"
                   type="file"
                   accept=".txt,.md,text/plain,text/markdown"
                   onChange={importSourceFile}
@@ -362,6 +363,7 @@ function App() {
             <span>剧本标题</span>
             <input
               aria-label="剧本标题"
+              data-testid="script-title-input"
               value={scriptTitle}
               onChange={(event) => setScriptTitle(event.target.value)}
               placeholder="未命名剧本"
@@ -369,13 +371,20 @@ function App() {
           </label>
           <textarea
             aria-label="小说文本输入"
+            data-testid="source-text-input"
             value={sourceText}
             onChange={(event) => setSourceText(event.target.value)}
             placeholder={"第 1 章 ...\n\n第 2 章 ...\n\n第 3 章 ..."}
           />
           <div className="panel-footer">
             <span className={`generation-message ${inputMessageStatus}`}>{inputMessage}</span>
-            <button className="generate-button" type="button" onClick={generateScript} disabled={isGenerating}>
+            <button
+              className="generate-button"
+              data-testid="generate-yaml-button"
+              type="button"
+              onClick={generateScript}
+              disabled={isGenerating}
+            >
               {isGenerating ? "生成中..." : "生成 YAML"}
             </button>
           </div>
@@ -389,30 +398,53 @@ function App() {
             </div>
             <div className="panel-actions">
               <span className="schema-badge">schema 0.1.0</span>
-              <button className="ghost-button" type="button" onClick={() => setYamlMode(yamlMode === "preview" ? "edit" : "preview")}>
+              <button
+                className="ghost-button"
+                data-testid="toggle-yaml-edit-button"
+                type="button"
+                onClick={() => setYamlMode(yamlMode === "preview" ? "edit" : "preview")}
+              >
                 {yamlMode === "preview" ? "在线编辑" : "完成编辑"}
               </button>
-              <button className="ghost-button" type="button" onClick={validateYaml} disabled={isValidating}>
+              <button
+                className="ghost-button"
+                data-testid="validate-yaml-button"
+                type="button"
+                onClick={validateYaml}
+                disabled={isValidating}
+              >
                 {isValidating ? "校验中..." : "校验 YAML"}
               </button>
-              <button className="ghost-button" type="button" onClick={copyYaml} disabled={isCopying}>
+              <button
+                className="ghost-button"
+                data-testid="copy-yaml-button"
+                type="button"
+                onClick={copyYaml}
+                disabled={isCopying}
+              >
                 {isCopying ? "复制中..." : copyButtonLabel}
               </button>
               <button className="ghost-button" type="button" onClick={resetYamlText}>
                 重置
               </button>
-              <button className="ghost-button" type="button" onClick={downloadYaml}>
+              <button
+                className="ghost-button"
+                data-testid="download-yaml-button"
+                type="button"
+                onClick={downloadYaml}
+              >
                 下载 YAML
               </button>
             </div>
           </div>
           {yamlMode === "preview" ? (
-            <pre className="yaml-preview" aria-label="剧本 YAML 预览">
+            <pre className="yaml-preview" data-testid="yaml-preview" aria-label="剧本 YAML 预览">
               {yamlText}
             </pre>
           ) : (
             <textarea
               className="yaml-editor"
+              data-testid="yaml-editor"
               aria-label="剧本 YAML 编辑器"
               value={yamlText}
               onChange={(event) => updateYamlText(event.target.value)}
