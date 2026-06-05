@@ -4,12 +4,24 @@ import "./App.css";
 
 type HealthStatus = "idle" | "checking" | "ok" | "error";
 type GenerationStatus = "idle" | "generating" | "success" | "error";
+type ValidationStatus = "idle" | "validating" | "valid" | "invalid" | "error";
 type YamlMode = "preview" | "edit";
 
 type GenerateScriptResponse = {
   status: "completed";
   schema_version: string;
   yaml: string;
+};
+
+type ScriptValidationError = {
+  code: string;
+  path: string;
+  message: string;
+};
+
+type ValidateScriptResponse = {
+  valid: boolean;
+  errors: ScriptValidationError[];
 };
 
 type ApiErrorResponse = {
@@ -55,6 +67,9 @@ function App() {
   const [healthMessage, setHealthMessage] = useState("未检测");
   const [generationStatus, setGenerationStatus] = useState<GenerationStatus>("idle");
   const [generationMessage, setGenerationMessage] = useState("待生成");
+  const [validationStatus, setValidationStatus] = useState<ValidationStatus>("idle");
+  const [validationMessage, setValidationMessage] = useState("待校验");
+  const [validationErrors, setValidationErrors] = useState<ScriptValidationError[]>([]);
   const [yamlMode, setYamlMode] = useState<YamlMode>("preview");
   const [scriptTitle, setScriptTitle] = useState(SAMPLE_TITLE);
   const [sourceText, setSourceText] = useState(SAMPLE_TEXT);
@@ -63,6 +78,18 @@ function App() {
   const characterCount = sourceText.trim().length;
   const chapterCount = countLikelyChapters(sourceText);
   const isGenerating = generationStatus === "generating";
+  const isValidating = validationStatus === "validating";
+
+  function resetValidationState(message = "待校验") {
+    setValidationStatus("idle");
+    setValidationMessage(message);
+    setValidationErrors([]);
+  }
+
+  function updateYamlText(nextYamlText: string) {
+    setYamlText(nextYamlText);
+    resetValidationState("YAML 已修改，待校验");
+  }
 
   async function checkBackend() {
     setHealthStatus("checking");
@@ -92,6 +119,7 @@ function App() {
   async function generateScript() {
     setGenerationStatus("generating");
     setGenerationMessage("生成中");
+    resetValidationState("生成中，待校验");
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/scripts/generate`, {
@@ -113,13 +141,55 @@ function App() {
 
       const result = payload as GenerateScriptResponse;
 
-      setYamlText(result.yaml);
+      updateYamlText(result.yaml);
       setYamlMode("preview");
       setGenerationStatus("success");
       setGenerationMessage(`已生成 schema ${result.schema_version}`);
+      setValidationMessage("已生成，待校验");
     } catch (error) {
       setGenerationStatus("error");
       setGenerationMessage(error instanceof Error ? error.message : "生成失败，请稍后重试。");
+    }
+  }
+
+  async function validateYaml() {
+    setValidationStatus("validating");
+    setValidationMessage("校验中");
+    setValidationErrors([]);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/scripts/validate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          schema_version: "0.1.0",
+          yaml: yamlText,
+        }),
+      });
+      const payload = await readJsonSafely(response);
+
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(payload));
+      }
+
+      const result = payload as ValidateScriptResponse;
+
+      if (result.valid) {
+        setValidationStatus("valid");
+        setValidationMessage("YAML 结构有效");
+        setValidationErrors([]);
+        return;
+      }
+
+      setValidationStatus("invalid");
+      setValidationMessage(`发现 ${result.errors.length} 个结构问题`);
+      setValidationErrors(result.errors);
+    } catch (error) {
+      setValidationStatus("error");
+      setValidationMessage(error instanceof Error ? error.message : "校验失败，请稍后重试。");
+      setValidationErrors([]);
     }
   }
 
@@ -144,10 +214,11 @@ function App() {
   }
 
   function resetYamlText() {
-    setYamlText(INITIAL_YAML);
+    updateYamlText(INITIAL_YAML);
     setYamlMode("preview");
     setGenerationStatus("idle");
     setGenerationMessage("待生成");
+    setValidationMessage("已重置，待校验");
   }
 
   return (
@@ -235,6 +306,9 @@ function App() {
               <button className="ghost-button" type="button" onClick={() => setYamlMode(yamlMode === "preview" ? "edit" : "preview")}>
                 {yamlMode === "preview" ? "在线编辑" : "完成编辑"}
               </button>
+              <button className="ghost-button" type="button" onClick={validateYaml} disabled={isValidating}>
+                {isValidating ? "校验中..." : "校验 YAML"}
+              </button>
               <button className="ghost-button" type="button" onClick={resetYamlText}>
                 重置
               </button>
@@ -252,10 +326,26 @@ function App() {
               className="yaml-editor"
               aria-label="剧本 YAML 编辑器"
               value={yamlText}
-              onChange={(event) => setYamlText(event.target.value)}
+              onChange={(event) => updateYamlText(event.target.value)}
               spellCheck={false}
             />
           )}
+          <div className={`validation-panel ${validationStatus}`} aria-live="polite">
+            <div className="validation-summary">
+              <strong>校验结果</strong>
+              <span>{validationMessage}</span>
+            </div>
+            {validationErrors.length > 0 ? (
+              <ul className="validation-errors">
+                {validationErrors.map((error, index) => (
+                  <li key={`${error.path}-${error.message}-${index}`}>
+                    <code>{error.path || "<root>"}</code>
+                    <span>{error.message}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         </section>
       </main>
     </div>
