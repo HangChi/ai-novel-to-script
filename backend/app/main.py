@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.chapter_parser import ChapterParseError, parse_novel_chapters
 from app.script_draft import SCHEMA_VERSION, build_script_yaml
+from app.script_validator import validate_script_yaml
 
 FRONTEND_DEV_ORIGINS = [
     "http://localhost:5173",
@@ -70,3 +71,10 @@ def generate_script(payload: dict[str, Any] = Body(...)) -> dict[str, str]:
         "schema_version": SCHEMA_VERSION,
         "yaml": build_script_yaml(title=title, chapters=chapters),
     }
+
+
+@app.post("/api/scripts/validate", tags=["scripts"])
+def validate_script(payload: dict[str, Any] = Body(...)) -> dict[str, object]:
+    yaml_text = _read_text_field(payload, "yaml")
+
+    return validate_script_yaml(yaml_text).to_dict()

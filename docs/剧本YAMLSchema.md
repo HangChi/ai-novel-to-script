@@ -105,10 +105,29 @@ scenes:
 
 ## 待完善
 
-- 字段必填规则。
 - 字段类型的正式 JSON Schema 或 YAML Schema 表达。
 - 剧本格式导出规则。
 - 多幕结构、分集结构和镜头级结构。
+
+## 当前后端校验规则
+
+后端已提供 `POST /api/scripts/validate` 对当前 Schema 进行基础校验：
+
+- YAML 必须能被解析为映射结构。
+- 顶层必须包含 `script`。
+- `script.schema_version` 必须为 `0.1.0`。
+- `script.title`、`script.logline` 必须为字符串。
+- `script.source.type` 必须为 `novel`。
+- `script.source.chapters_count` 必须是不少于 3 的整数。
+- `script.source.chapter_titles` 必须是字符串列表，数量需与 `chapters_count` 一致。
+- `script.characters` 必须是列表，人物项需包含字符串类型的 `id` 和 `name`。
+- `script.scenes` 必须是非空列表。
+- 场次项需包含字符串类型的 `id`、`title`、`source_chapter`、`location`、`time`。
+- 场次 `characters` 必须是字符串列表。
+- 场次 `beats` 必须是非空列表。
+- `beat.type` 仅支持 `action`、`dialogue`、`narration`、`transition`。
+- `beat.text` 必须是字符串。
+- `dialogue` 类型的 beat 必须包含字符串类型的 `character`。
 
 ## 当前后端序列化策略
 
