@@ -1,0 +1,40 @@
+script:
+  schema_version: 0.1.0
+  title: 雨夜来信
+  logline: ''
+  source:
+    type: novel
+    chapters_count: 3
+    chapter_titles:
+      - 第 1 章 初遇
+      - 第 2 章 暗线
+      - 第 3 章 选择
+  characters: []
+  scenes:
+    - id: scene-001
+      title: 第 1 章 初遇
+      source_chapter: 第 1 章 初遇
+      location: ''
+      time: ''
+      characters: []
+      beats:
+        - type: narration
+          text: 林澈推门而入，雨水顺着衣角滴落。
+    - id: scene-002
+      title: 第 2 章 暗线
+      source_chapter: 第 2 章 暗线
+      location: ''
+      time: ''
+      characters: []
+      beats:
+        - type: narration
+          text: 苏晚在旧信封里发现陌生地址。
+    - id: scene-003
+      title: 第 3 章 选择
+      source_chapter: 第 3 章 选择
+      location: ''
+      time: ''
+      characters: []
+      beats:
+        - type: narration
+          text: 两人在清晨的站台前做出决定。
