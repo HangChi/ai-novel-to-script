@@ -377,6 +377,74 @@ function updateBeatStringField(
   return lines.join("\n");
 }
 
+function nextSceneId(lines: string[]) {
+  let max = 0;
+
+  for (const line of lines) {
+    const match = line.match(/id:\s*"?scene-(\d+)"?/);
+
+    if (match) {
+      max = Math.max(max, Number(match[1]));
+    }
+  }
+
+  return `scene-${String(max + 1).padStart(3, "0")}`;
+}
+
+function addScene(yamlText: string) {
+  const lines = yamlText.split(/\r?\n/);
+  const nextId = nextSceneId(lines);
+  const block = [
+    `    - id: ${nextId}`,
+    '      title: ""',
+    '      source_chapter: ""',
+    '      location: ""',
+    '      time: ""',
+    '      characters: []',
+    '      beats:',
+    '        - type: "narration"',
+    '          text: ""',
+  ];
+
+  const emptyIndex = lines.findIndex((line) => /^  scenes:\s*\[\]\s*$/.test(line));
+
+  if (emptyIndex >= 0) {
+    lines[emptyIndex] = "  scenes:";
+    lines.splice(emptyIndex + 1, 0, ...block);
+    return lines.join("\n");
+  }
+
+  const ranges = getSceneRanges(lines);
+
+  if (ranges.length === 0) {
+    const scenesIndex = lines.findIndex((line) => /^  scenes:\s*$/.test(line));
+
+    if (scenesIndex < 0) {
+      return yamlText;
+    }
+
+    lines.splice(scenesIndex + 1, 0, ...block);
+    return lines.join("\n");
+  }
+
+  const lastRange = ranges[ranges.length - 1];
+  lines.splice(lastRange.end, 0, ...block);
+  return lines.join("\n");
+}
+
+function removeScene(yamlText: string, sceneIndex: number) {
+  const lines = yamlText.split(/\r?\n/);
+  const ranges = getSceneRanges(lines);
+  const range = ranges[sceneIndex];
+
+  if (!range || ranges.length <= 1) {
+    return yamlText;
+  }
+
+  lines.splice(range.start, range.end - range.start);
+  return lines.join("\n");
+}
+
 function addBeatToScene(yamlText: string, sceneIndex: number) {
   const lines = yamlText.split(/\r?\n/);
   const sceneRange = getSceneRanges(lines)[sceneIndex];
@@ -973,6 +1041,14 @@ function App() {
     updateStructuredYamlText(removeSceneCharacter(yamlText, sceneIndex, characterIndex));
   }
 
+  function addSceneEntry() {
+    updateStructuredYamlText(addScene(yamlText));
+  }
+
+  function removeSceneEntry(sceneIndex: number) {
+    updateStructuredYamlText(removeScene(yamlText, sceneIndex));
+  }
+
   async function checkBackend() {
     setHealthStatus("checking");
     setHealthMessage("检测中");
@@ -1372,6 +1448,18 @@ function App() {
                     <ol className="scene-preview-list">
                       {structuredPreview.script.scenes.map((scene, sceneIndex) => (
                         <li key={`${scene.id}-${scene.title}-${sceneIndex}`} data-testid="structured-scene">
+                          <div className="scene-editor-toolbar">
+                            <strong>场景 {sceneIndex + 1}</strong>
+                            <button
+                              className="small-ghost-button"
+                              data-testid={`structured-scene-delete-button-${sceneIndex}`}
+                              type="button"
+                              onClick={() => removeSceneEntry(sceneIndex)}
+                              disabled={structuredPreview.script.scenes.length <= 1}
+                            >
+                              删除场景
+                            </button>
+                          </div>
                           <div className="scene-field-grid">
                             <div className="scene-field">
                               <label htmlFor={`structured-scene-title-input-${sceneIndex}`}>场景标题</label>
@@ -1516,6 +1604,14 @@ function App() {
                   ) : (
                     <p className="structured-empty">暂无场景</p>
                   )}
+                  <button
+                    className="small-ghost-button add-scene-button"
+                    data-testid="structured-add-scene-button"
+                    type="button"
+                    onClick={addSceneEntry}
+                  >
+                    新增场景
+                  </button>
                 </div>
               </div>
             ) : (
