@@ -73,6 +73,10 @@ async function ensureBackend() {
     ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", String(backendPort)],
     backendDir,
     "backend",
+    {
+      ...process.env,
+      AI_PROVIDER: "local",
+    },
   );
   await waitFor(`${backendBaseUrl}/api/health`, "backend");
 }
@@ -199,11 +203,18 @@ async function runBrowserSmoke() {
     await page.waitForFunction(
       () => {
         const statusText = document.querySelector('[data-testid="ai-provider-status"]')?.textContent ?? "";
-        return statusText.includes("本地骨架") && statusText.includes("配置正常");
+        const backendText = document.querySelector('[data-testid="backend-status"]')?.textContent ?? "";
+        return statusText.includes("本地骨架")
+          && statusText.includes("本地模式")
+          && backendText.includes("已连接");
       },
       null,
       { timeout: 10_000 },
     );
+    const schemaBadgeCount = await page.locator(".schema-badge").count();
+    if (schemaBadgeCount !== 0) {
+      throw new Error("schema badge should not be displayed in the YAML panel header");
+    }
     await page.getByTestId("source-file-input").setInputFiles(sampleNovelPath);
     await page.waitForFunction(
       (expectedText) => {

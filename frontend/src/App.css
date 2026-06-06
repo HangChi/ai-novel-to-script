@@ -1,4 +1,7 @@
 .app-shell {
+  --workspace-columns: minmax(300px, 0.88fr) minmax(360px, 1fr) minmax(360px, 1fr);
+  --workspace-gap: 18px;
+
   display: flex;
   height: 100vh;
   min-height: 0;
@@ -54,56 +57,105 @@ h3 {
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
-.ai-status-card {
+.service-status-card {
   display: grid;
-  min-width: 210px;
-  gap: 2px;
+  min-height: 48px;
+  min-width: 150px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
   border: 1px solid #d8dee7;
   border-radius: 8px;
   background: #ffffff;
-  padding: 8px 12px;
+  padding: 7px 10px;
 }
 
-.ai-status-card span,
-.ai-status-card small {
+.service-status-label {
+  display: inline-flex;
+  width: 34px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #edf2f7;
+  color: #4d5d72;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.service-status-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.service-status-card small {
   color: #607086;
   font-size: 0.72rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
-.ai-status-card strong {
+.service-status-card strong {
   color: #1d2b3d;
   font-size: 0.92rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
-.ai-status-card small {
+.service-status-card small {
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
-.ai-status-card.ready {
+.service-status-card.ready,
+.service-status-card.ok {
   border-color: #cbe4d8;
   background: #f4fbf7;
 }
 
-.ai-status-card.warning,
-.ai-status-card.loading {
+.service-status-card.ready .service-status-label,
+.service-status-card.ok .service-status-label {
+  background: #dff3e9;
+  color: #17663a;
+}
+
+.service-status-card.warning,
+.service-status-card.loading,
+.service-status-card.checking {
   border-color: #ecd9a8;
   background: #fffaf0;
 }
 
-.ai-status-card.error {
+.service-status-card.warning .service-status-label,
+.service-status-card.loading .service-status-label,
+.service-status-card.checking .service-status-label {
+  background: #fff0c8;
+  color: #846118;
+}
+
+.service-status-card.error {
   border-color: #efc8c3;
   background: #fff6f5;
 }
 
+.service-status-card.error .service-status-label {
+  background: #fde2df;
+  color: #a43c33;
+}
+
+.ai-status-card {
+  min-width: 230px;
+}
+
+.backend-status-card {
+  min-width: 136px;
+}
+
 .status-button {
-  min-width: 112px;
+  min-width: 96px;
   border: 1px solid #243247;
   border-radius: 6px;
   background: #243247;
@@ -120,8 +172,8 @@ h3 {
 
 .workspace-shell {
   display: grid;
-  grid-template-columns: minmax(300px, 0.88fr) minmax(360px, 1fr) minmax(360px, 1fr);
-  gap: 18px;
+  grid-template-columns: var(--workspace-columns);
+  gap: var(--workspace-gap);
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -130,8 +182,8 @@ h3 {
 
 .summary-rail {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: var(--workspace-columns);
+  gap: var(--workspace-gap);
   flex: 0 0 auto;
   min-height: 0;
   padding: 12px 32px 0;
@@ -215,14 +267,12 @@ h3 {
   flex: 0 0 auto;
 }
 
-.yaml-action-bar {
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  overflow: visible;
-  padding: 10px 18px;
-  border-bottom: 1px solid #e6eaf0;
-  background: #ffffff;
+.yaml-header-actions {
+  align-self: center;
+}
+
+.yaml-header-actions .ghost-button {
+  padding: 7px 9px;
 }
 
 .ghost-button {
@@ -375,17 +425,6 @@ textarea::placeholder {
 
 .structure-panel {
   border-top: 4px solid #6a5f9f;
-}
-
-.schema-badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  background: #e7f2ee;
-  color: #27614f;
-  font-weight: 800;
-  padding: 5px 10px;
-  white-space: nowrap;
 }
 
 .yaml-preview {
@@ -915,6 +954,11 @@ textarea::placeholder {
 }
 
 @media (max-width: 1220px) {
+  .summary-rail {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
   .workspace-shell {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: minmax(260px, 0.86fr) minmax(360px, 1.14fr);
@@ -943,7 +987,7 @@ textarea::placeholder {
     flex-direction: column;
   }
 
-  .ai-status-card {
+  .service-status-card {
     width: 100%;
   }
 
