@@ -192,6 +192,7 @@ h3 {
 }
 
 .ghost-button:hover,
+.small-ghost-button:hover,
 .status-button:hover,
 .generate-button:hover {
   filter: brightness(0.97);
@@ -566,11 +567,14 @@ textarea::placeholder {
   padding: 3px 8px;
 }
 
+.beat-editor-list {
+  display: grid;
+  gap: 8px;
+}
+
 .beat-preview-list li {
   display: grid;
-  grid-template-columns: 86px minmax(0, 1fr);
   gap: 8px;
-  align-items: start;
   border-top: 1px solid #e7ecf2;
   padding-top: 8px;
 }
@@ -580,16 +584,62 @@ textarea::placeholder {
   padding-top: 0;
 }
 
-.beat-type-label {
-  display: inline-flex;
-  justify-content: center;
-  border-radius: 5px;
-  background: #e8f1ef;
-  color: #27614f;
-  font-size: 0.72rem;
-  font-weight: 900;
-  padding: 3px 6px;
-  text-transform: uppercase;
+.beat-editor-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, 150px) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.beat-editor-toolbar label,
+.beat-character-label {
+  color: #617086;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.beat-editor-toolbar select,
+.beat-preview-list textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d8dee7;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1a2433;
+  font: 0.86rem/1.45 inherit;
+  outline: none;
+  padding: 7px 9px;
+}
+
+.beat-preview-list textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.beat-editor-toolbar select:focus,
+.beat-preview-list textarea:focus {
+  border-color: #3b6ea8;
+  box-shadow: 0 0 0 3px rgba(59, 110, 168, 0.12);
+}
+
+.small-ghost-button {
+  border: 1px solid #d5dce6;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #314156;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 7px 9px;
+}
+
+.small-ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.add-beat-button {
+  justify-self: start;
 }
 
 .beat-preview-list strong {
@@ -698,6 +748,10 @@ textarea::placeholder {
   }
 
   .scene-field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .beat-editor-toolbar {
     grid-template-columns: 1fr;
   }
 

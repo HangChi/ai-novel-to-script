@@ -11,6 +11,8 @@ type YamlMode = "preview" | "edit";
 
 type StructuredPreviewStatus = "ready" | "empty" | "error";
 
+const BEAT_TYPE_OPTIONS = ["action", "dialogue", "narration", "transition"] as const;
+
 type GenerateScriptResponse = {
   status: "completed";
   schema_version: string;
@@ -251,6 +253,171 @@ function updateSceneStringField(
   }
 
   lines.splice(insertAfterIndex + 1, 0, formattedLine);
+  return lines.join("\n");
+}
+
+function getBeatRanges(lines: string[], sceneRange: { start: number; end: number }) {
+  const beatsIndex = lines.findIndex((line, index) => {
+    return index > sceneRange.start && index < sceneRange.end && /^      beats:\s*(?:\[\])?\s*$/.test(line);
+  });
+
+  if (beatsIndex < 0 || /\[\]\s*$/.test(lines[beatsIndex])) {
+    return { beatsIndex, ranges: [] };
+  }
+
+  const ranges: Array<{ start: number; end: number }> = [];
+
+  for (let index = beatsIndex + 1; index < sceneRange.end; index += 1) {
+    const line = lines[index];
+
+    if (line.trim() && (line.match(/^ */)?.[0].length ?? 0) <= 6) {
+      break;
+    }
+
+    if (/^        -\s+type:\s*.*$/.test(line)) {
+      const previousRange = ranges[ranges.length - 1];
+
+      if (previousRange) {
+        previousRange.end = index;
+      }
+
+      ranges.push({ start: index, end: sceneRange.end });
+    }
+  }
+
+  const lastRange = ranges[ranges.length - 1];
+
+  if (lastRange) {
+    for (let index = lastRange.start + 1; index < sceneRange.end; index += 1) {
+      const line = lines[index];
+
+      if (/^        -\s+type:\s*.*$/.test(line) || (line.trim() && (line.match(/^ */)?.[0].length ?? 0) <= 6)) {
+        lastRange.end = index;
+        break;
+      }
+    }
+  }
+
+  return { beatsIndex, ranges };
+}
+
+function ensureDialogueCharacter(lines: string[], beatRange: { start: number; end: number }) {
+  for (let index = beatRange.start + 1; index < beatRange.end; index += 1) {
+    if (/^          character:\s*.*$/.test(lines[index])) {
+      return;
+    }
+  }
+
+  lines.splice(beatRange.start + 1, 0, '          character: "TBD"');
+  beatRange.end += 1;
+}
+
+function updateBeatStringField(
+  yamlText: string,
+  sceneIndex: number,
+  beatIndex: number,
+  fieldName: "type" | "text",
+  value: string,
+) {
+  const lines = yamlText.split(/\r?\n/);
+  const sceneRange = getSceneRanges(lines)[sceneIndex];
+
+  if (!sceneRange) {
+    return yamlText;
+  }
+
+  const beatRange = getBeatRanges(lines, sceneRange).ranges[beatIndex];
+
+  if (!beatRange) {
+    return yamlText;
+  }
+
+  if (fieldName === "type") {
+    lines[beatRange.start] = `        - type: "${escapeYamlDoubleQuotedValue(value)}"`;
+
+    if (value === "dialogue") {
+      ensureDialogueCharacter(lines, beatRange);
+    }
+
+    return lines.join("\n");
+  }
+
+  const formattedLine = `          text: "${escapeYamlDoubleQuotedValue(value)}"`;
+
+  for (let index = beatRange.start + 1; index < beatRange.end; index += 1) {
+    if (/^          text:\s*.*$/.test(lines[index])) {
+      lines[index] = formattedLine;
+      return lines.join("\n");
+    }
+  }
+
+  let insertAfterIndex = beatRange.start;
+
+  for (let index = beatRange.start + 1; index < beatRange.end; index += 1) {
+    if (/^          character:\s*.*$/.test(lines[index])) {
+      insertAfterIndex = index;
+    }
+  }
+
+  lines.splice(insertAfterIndex + 1, 0, formattedLine);
+  return lines.join("\n");
+}
+
+function addBeatToScene(yamlText: string, sceneIndex: number) {
+  const lines = yamlText.split(/\r?\n/);
+  const sceneRange = getSceneRanges(lines)[sceneIndex];
+
+  if (!sceneRange) {
+    return yamlText;
+  }
+
+  const beatLines = ['        - type: "narration"', '          text: ""'];
+  const beatsInfo = getBeatRanges(lines, sceneRange);
+
+  if (beatsInfo.beatsIndex >= 0) {
+    if (/\[\]\s*$/.test(lines[beatsInfo.beatsIndex])) {
+      lines[beatsInfo.beatsIndex] = "      beats:";
+      lines.splice(beatsInfo.beatsIndex + 1, 0, ...beatLines);
+      return lines.join("\n");
+    }
+
+    const lastBeatRange = beatsInfo.ranges[beatsInfo.ranges.length - 1];
+    const insertAtIndex = lastBeatRange ? lastBeatRange.end : beatsInfo.beatsIndex + 1;
+    lines.splice(insertAtIndex, 0, ...beatLines);
+    return lines.join("\n");
+  }
+
+  const targetOrder = getSceneFieldOrder("      beats:");
+  let insertAfterIndex = sceneRange.start;
+
+  for (let index = sceneRange.start; index < sceneRange.end; index += 1) {
+    const fieldOrder = getSceneFieldOrder(lines[index]);
+
+    if (fieldOrder >= 0 && fieldOrder < targetOrder) {
+      insertAfterIndex = index;
+    }
+  }
+
+  lines.splice(insertAfterIndex + 1, 0, "      beats:", ...beatLines);
+  return lines.join("\n");
+}
+
+function removeBeatFromScene(yamlText: string, sceneIndex: number, beatIndex: number) {
+  const lines = yamlText.split(/\r?\n/);
+  const sceneRange = getSceneRanges(lines)[sceneIndex];
+
+  if (!sceneRange) {
+    return yamlText;
+  }
+
+  const beatRanges = getBeatRanges(lines, sceneRange).ranges;
+  const beatRange = beatRanges[beatIndex];
+
+  if (!beatRange || beatRanges.length <= 1) {
+    return yamlText;
+  }
+
+  lines.splice(beatRange.start, beatRange.end - beatRange.start);
   return lines.join("\n");
 }
 
@@ -496,6 +663,18 @@ function App() {
 
   function updateSceneMetadata(sceneIndex: number, fieldName: "title" | "location" | "time", value: string) {
     updateYamlText(updateSceneStringField(yamlText, sceneIndex, fieldName, value));
+  }
+
+  function updateBeatMetadata(sceneIndex: number, beatIndex: number, fieldName: "type" | "text", value: string) {
+    updateYamlText(updateBeatStringField(yamlText, sceneIndex, beatIndex, fieldName, value));
+  }
+
+  function addSceneBeat(sceneIndex: number) {
+    updateYamlText(addBeatToScene(yamlText, sceneIndex));
+  }
+
+  function removeSceneBeat(sceneIndex: number, beatIndex: number) {
+    updateYamlText(removeBeatFromScene(yamlText, sceneIndex, beatIndex));
   }
 
   async function checkBackend() {
@@ -964,21 +1143,63 @@ function App() {
                               ))}
                             </div>
                           ) : null}
-                          {scene.beats.length > 0 ? (
-                            <ul className="beat-preview-list">
-                              {scene.beats.map((beat, beatIndex) => (
-                                <li key={`${scene.id}-${beat.type}-${beatIndex}`} data-testid="structured-beat">
-                                  <span className="beat-type-label">{displayValue(beat.type, "unknown")}</span>
-                                  <p>
-                                    {beat.character ? <strong>{beat.character}：</strong> : null}
-                                    {displayValue(beat.text, "内容待补充")}
-                                  </p>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="structured-empty">暂无 beats</p>
-                          )}
+                          <div className="beat-editor-list">
+                            {scene.beats.length > 0 ? (
+                              <ul className="beat-preview-list">
+                                {scene.beats.map((beat, beatIndex) => (
+                                  <li key={`${scene.id}-${beat.type}-${beatIndex}`} data-testid="structured-beat">
+                                    <div className="beat-editor-toolbar">
+                                      <label htmlFor={`structured-beat-type-select-${sceneIndex}-${beatIndex}`}>
+                                        Beat {beatIndex + 1}
+                                      </label>
+                                      <select
+                                        id={`structured-beat-type-select-${sceneIndex}-${beatIndex}`}
+                                        data-testid={`structured-beat-type-select-${sceneIndex}-${beatIndex}`}
+                                        value={beat.type}
+                                        onChange={(event) => updateBeatMetadata(sceneIndex, beatIndex, "type", event.target.value)}
+                                      >
+                                        {BEAT_TYPE_OPTIONS.includes(beat.type as (typeof BEAT_TYPE_OPTIONS)[number]) ? null : (
+                                          <option value={beat.type}>{displayValue(beat.type, "unknown")}</option>
+                                        )}
+                                        {BEAT_TYPE_OPTIONS.map((beatType) => (
+                                          <option key={beatType} value={beatType}>
+                                            {beatType}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <button
+                                        className="small-ghost-button"
+                                        data-testid={`structured-beat-delete-button-${sceneIndex}-${beatIndex}`}
+                                        type="button"
+                                        onClick={() => removeSceneBeat(sceneIndex, beatIndex)}
+                                        disabled={scene.beats.length <= 1}
+                                      >
+                                        删除
+                                      </button>
+                                    </div>
+                                    {beat.character ? <span className="beat-character-label">{beat.character}</span> : null}
+                                    <textarea
+                                      data-testid={`structured-beat-text-input-${sceneIndex}-${beatIndex}`}
+                                      value={beat.text}
+                                      onChange={(event) => updateBeatMetadata(sceneIndex, beatIndex, "text", event.target.value)}
+                                      rows={3}
+                                      placeholder="内容待补充"
+                                    />
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="structured-empty">暂无 beats</p>
+                            )}
+                            <button
+                              className="small-ghost-button add-beat-button"
+                              data-testid={`structured-add-beat-button-${sceneIndex}`}
+                              type="button"
+                              onClick={() => addSceneBeat(sceneIndex)}
+                            >
+                              新增 beat
+                            </button>
+                          </div>
                         </li>
                       ))}
                     </ol>
