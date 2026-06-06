@@ -648,6 +648,22 @@ textarea::placeholder {
   font-weight: 800;
 }
 
+.beat-character-input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d8dee7;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 6px 9px;
+  font: inherit;
+  color: #1f2733;
+}
+
+.beat-character-input:focus {
+  outline: none;
+  border-color: #2f6f57;
+}
+
 .beat-editor-toolbar select,
 .beat-preview-list textarea {
   width: 100%;
