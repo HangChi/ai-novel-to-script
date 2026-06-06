@@ -203,7 +203,10 @@ async function runBrowserSmoke() {
     }
 
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="structured-title"]')?.textContent?.includes("rain-letter-novel"),
+      () => {
+        const input = document.querySelector('[data-testid="structured-title-input"]');
+        return input instanceof HTMLInputElement && input.value.includes("rain-letter-novel");
+      },
       null,
       { timeout: 10_000 },
     );
@@ -219,12 +222,26 @@ async function runBrowserSmoke() {
       throw new Error(`structured preview rendered ${beatCount} beats`);
     }
 
+    await page.getByTestId("structured-title-input").fill("Rain Letter Script");
+    await page.getByTestId("structured-logline-input").fill("A letter pulls two strangers toward a dawn choice.");
+    await page.waitForFunction(
+      () => {
+        const previewText = document.querySelector('[data-testid="yaml-preview"]')?.textContent ?? "";
+        return previewText.includes('title: "Rain Letter Script"')
+          && previewText.includes('logline: "A letter pulls two strangers toward a dawn choice."');
+      },
+      null,
+      { timeout: 10_000 },
+    );
+
     await page.getByTestId("validate-yaml-button").click();
     await page.locator(".validation-panel.valid").waitFor({ timeout: 10_000 });
 
     await page.getByTestId("copy-yaml-button").click();
     const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
-    if (!clipboardText.includes("script:") || !clipboardText.includes("type: narration")) {
+    if (!clipboardText.includes("script:")
+      || !clipboardText.includes('title: "Rain Letter Script"')
+      || !clipboardText.includes("type: narration")) {
       throw new Error("copied YAML did not match the generated script");
     }
 
@@ -243,7 +260,9 @@ async function runBrowserSmoke() {
     }
 
     const downloadedYaml = await readFile(downloadedPath, "utf-8");
-    if (!downloadedYaml.includes("script:") || !downloadedYaml.includes("type: narration")) {
+    if (!downloadedYaml.includes("script:")
+      || !downloadedYaml.includes('logline: "A letter pulls two strangers toward a dawn choice."')
+      || !downloadedYaml.includes("type: narration")) {
       throw new Error("downloaded YAML did not match the generated script");
     }
 

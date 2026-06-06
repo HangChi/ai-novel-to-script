@@ -121,6 +121,44 @@ function readYamlScalar(rawValue: string) {
   return value;
 }
 
+function escapeYamlDoubleQuotedValue(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function formatYamlStringField(fieldName: string, value: string) {
+  return `  ${fieldName}: "${escapeYamlDoubleQuotedValue(value)}"`;
+}
+
+function updateScriptStringField(yamlText: string, fieldName: "title" | "logline", value: string) {
+  const lines = yamlText.split(/\r?\n/);
+  const fieldPattern = new RegExp(`^  ${fieldName}:\\s*.*$`);
+  const existingIndex = lines.findIndex((line) => fieldPattern.test(line));
+  const formattedLine = formatYamlStringField(fieldName, value);
+
+  if (existingIndex >= 0) {
+    lines[existingIndex] = formattedLine;
+    return lines.join("\n");
+  }
+
+  const schemaIndex = lines.findIndex((line) => /^  schema_version:\s*.*$/.test(line));
+  const titleIndex = lines.findIndex((line) => /^  title:\s*.*$/.test(line));
+  const insertAfterIndex = fieldName === "title" ? schemaIndex : titleIndex >= 0 ? titleIndex : schemaIndex;
+
+  if (insertAfterIndex >= 0) {
+    lines.splice(insertAfterIndex + 1, 0, formattedLine);
+    return lines.join("\n");
+  }
+
+  const scriptIndex = lines.findIndex((line) => line.trim() === "script:");
+
+  if (scriptIndex >= 0) {
+    lines.splice(scriptIndex + 1, 0, formattedLine);
+    return lines.join("\n");
+  }
+
+  return yamlText;
+}
+
 function getIndentedSection(lines: string[], startIndex: number, parentIndent: number) {
   const section: string[] = [];
 
@@ -355,6 +393,10 @@ function App() {
     setYamlText(nextYamlText);
     resetValidationState("YAML 已修改，待校验");
     setCopyStatus("idle");
+  }
+
+  function updateScriptMetadata(fieldName: "title" | "logline", value: string) {
+    updateYamlText(updateScriptStringField(yamlText, fieldName, value));
   }
 
   async function checkBackend() {
@@ -733,12 +775,25 @@ function App() {
               <div className="structured-preview-content">
                 <div className="script-overview">
                   <div className="script-field">
-                    <span>剧本标题</span>
-                    <strong data-testid="structured-title">{displayValue(structuredPreview.script.title)}</strong>
+                    <label htmlFor="structured-title-input">剧本标题</label>
+                    <input
+                      id="structured-title-input"
+                      data-testid="structured-title-input"
+                      value={structuredPreview.script.title}
+                      onChange={(event) => updateScriptMetadata("title", event.target.value)}
+                      placeholder="未填写"
+                    />
                   </div>
                   <div className="script-field logline-field">
-                    <span>Logline</span>
-                    <strong data-testid="structured-logline">{displayValue(structuredPreview.script.logline)}</strong>
+                    <label htmlFor="structured-logline-input">Logline</label>
+                    <textarea
+                      id="structured-logline-input"
+                      data-testid="structured-logline-input"
+                      value={structuredPreview.script.logline}
+                      onChange={(event) => updateScriptMetadata("logline", event.target.value)}
+                      placeholder="未填写"
+                      rows={3}
+                    />
                   </div>
                 </div>
 
