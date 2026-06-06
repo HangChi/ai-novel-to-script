@@ -7,7 +7,7 @@ from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from app.script_validator import validate_script_yaml
+from app.script_validator import ScriptYamlValidationResult, validate_script_yaml
 
 SYSTEM_PROMPT = """You are an AI script adaptation assistant.
 Convert the provided YAML skeleton into a polished screenplay draft YAML.
@@ -69,28 +69,49 @@ class OpenAICompatibleScriptAIProvider:
             )
 
     def generate_script_yaml(self, title: str, skeleton_yaml: str) -> str:
-        payload = {
-            "model": self.model,
-            "temperature": self.temperature,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT,
-                },
-                {
-                    "role": "user",
-                    "content": _build_rewrite_prompt(title=title, skeleton_yaml=skeleton_yaml),
-                },
-            ],
-        }
+        messages = [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": _build_rewrite_prompt(title=title, skeleton_yaml=skeleton_yaml),
+            },
+        ]
+        payload = self._build_completion_payload(messages)
         raw_yaml = _strip_markdown_fence(self._request_completion(payload))
         validation = validate_script_yaml(raw_yaml)
 
-        if not validation.valid:
-            error_paths = ", ".join(error.path or "<root>" for error in validation.errors[:5])
+        if validation.valid:
+            return raw_yaml
+
+        repair_messages = [
+            *messages,
+            {
+                "role": "assistant",
+                "content": raw_yaml,
+            },
+            {
+                "role": "user",
+                "content": _build_repair_prompt(raw_yaml=raw_yaml, validation=validation),
+            },
+        ]
+        repaired_yaml = _strip_markdown_fence(self._request_completion(self._build_completion_payload(repair_messages)))
+        repaired_validation = validate_script_yaml(repaired_yaml)
+
+        if not repaired_validation.valid:
+            error_paths = _format_validation_error_paths(repaired_validation)
             raise AIProviderError(f"AI response did not match YAML schema: {error_paths}")
 
-        return raw_yaml
+        return repaired_yaml
+
+    def _build_completion_payload(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+        return {
+            "model": self.model,
+            "temperature": self.temperature,
+            "messages": messages,
+        }
 
     def _request_completion(self, payload: dict[str, Any]) -> str:
         request = Request(
@@ -138,6 +159,28 @@ def _build_rewrite_prompt(title: str, skeleton_yaml: str) -> str:
         "- ordered beats using action, dialogue, narration, or transition only\n\n"
         "```yaml\n"
         f"{skeleton_yaml}"
+        "```"
+    )
+
+
+def _format_validation_error_paths(validation: ScriptYamlValidationResult) -> str:
+    return ", ".join(error.path or "<root>" for error in validation.errors[:5])
+
+
+def _build_repair_prompt(raw_yaml: str, validation: ScriptYamlValidationResult) -> str:
+    errors = "\n".join(
+        f"- {error.path or '<root>'}: {error.message}"
+        for error in validation.errors[:10]
+    )
+
+    return (
+        "The previous response did not match the required screenplay YAML schema.\n"
+        "Repair the YAML and return YAML only, without Markdown fences or commentary.\n\n"
+        "Validation errors:\n"
+        f"{errors}\n\n"
+        "Previous YAML:\n"
+        "```yaml\n"
+        f"{raw_yaml}\n"
         "```"
     )
 
