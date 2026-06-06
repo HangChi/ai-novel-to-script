@@ -40,7 +40,7 @@ function Get-ListeningProcessIds {
     }
   }
 
-  return $processIds
+  return ,$processIds
 }
 
 function Test-DemoCommand {
