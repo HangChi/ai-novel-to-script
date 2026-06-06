@@ -43,7 +43,7 @@ project/
 
 ## 技术栈与第三方依赖
 
-当前框架采用前后端分离架构，MVP 阶段暂不引入数据库。AI Provider 使用可配置的运行时服务调用，当前不引入 AI SDK。
+当前框架采用前后端分离架构，MVP 阶段暂不引入数据库。AI Provider 使用可配置的运行时服务调用，当前不引入 AI SDK；后端已支持 `local`、通用 `openai` 和 `deepseek` 三种 Provider 配置。
 
 | 模块 | 技术或依赖 | 用途 |
 | --- | --- | --- |
@@ -87,7 +87,16 @@ http://127.0.0.1:8000/api/health
 $env:AI_PROVIDER="local"
 ```
 
-`local` 模式会返回稳定的 YAML 骨架，适合本地开发和测试。启用 OpenAI-compatible Provider 时，需要配置：
+`local` 模式会返回稳定的 YAML 骨架，适合本地开发和测试。启用 DeepSeek Provider 时，需要配置：
+
+```powershell
+$env:AI_PROVIDER="deepseek"
+$env:DEEPSEEK_API_KEY="你的 DeepSeek API Key"
+$env:DEEPSEEK_MODEL="deepseek-v4-flash"
+$env:DEEPSEEK_BASE_URL="https://api.deepseek.com"
+```
+
+`DEEPSEEK_MODEL` 默认使用 `deepseek-v4-flash`，也可以按部署需要改为 `deepseek-v4-pro`。如需启用通用 OpenAI-compatible Provider，则配置：
 
 ```powershell
 $env:AI_PROVIDER="openai"
@@ -100,6 +109,7 @@ $env:OPENAI_BASE_URL="https://api.openai.com/v1"
 
 ```powershell
 $env:OPENAI_TEMPERATURE="0.3"
+$env:DEEPSEEK_TEMPERATURE="0.3"
 $env:AI_PROVIDER_TIMEOUT_SECONDS="60"
 ```
 

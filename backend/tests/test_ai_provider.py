@@ -68,6 +68,52 @@ def test_create_provider_builds_openai_provider(monkeypatch: pytest.MonkeyPatch)
     assert provider.timeout_seconds == 5
 
 
+def test_create_provider_builds_deepseek_provider_with_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
+    monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
+    monkeypatch.delenv("DEEPSEEK_TEMPERATURE", raising=False)
+    monkeypatch.delenv("AI_PROVIDER_TIMEOUT_SECONDS", raising=False)
+
+    provider = create_ai_provider_from_env()
+
+    assert isinstance(provider, OpenAICompatibleScriptAIProvider)
+    assert provider.api_key == "test-key"
+    assert provider.model == "deepseek-v4-flash"
+    assert provider.base_url == "https://api.deepseek.com"
+    assert provider.temperature == 0.3
+    assert provider.timeout_seconds == 60.0
+    assert provider.provider_name == "deepseek"
+    assert provider.api_key_env_name == "DEEPSEEK_API_KEY"
+    assert provider.model_env_name == "DEEPSEEK_MODEL"
+
+
+def test_create_provider_builds_deepseek_provider_with_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://example.test")
+    monkeypatch.setenv("DEEPSEEK_TEMPERATURE", "0.2")
+    monkeypatch.setenv("AI_PROVIDER_TIMEOUT_SECONDS", "10")
+
+    provider = create_ai_provider_from_env()
+
+    assert isinstance(provider, OpenAICompatibleScriptAIProvider)
+    assert provider.model == "deepseek-v4-pro"
+    assert provider.base_url == "https://example.test"
+    assert provider.temperature == 0.2
+    assert provider.timeout_seconds == 10
+
+
+def test_deepseek_provider_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "deepseek")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+    with pytest.raises(AIProviderError, match="DEEPSEEK_API_KEY"):
+        create_ai_provider_from_env()
+
+
 def test_openai_provider_requires_model() -> None:
     with pytest.raises(AIProviderError, match="OPENAI_MODEL"):
         OpenAICompatibleScriptAIProvider(api_key="test-key", model="")
