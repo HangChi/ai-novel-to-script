@@ -79,6 +79,14 @@ python -m venv .venv
 http://127.0.0.1:8000/api/health
 ```
 
+AI Provider 状态地址：
+
+```text
+http://127.0.0.1:8000/api/ai/status
+```
+
+该接口只返回 provider、模式、模型、base URL 和缺失配置项，不返回任何 API Key。
+
 #### AI Provider 配置
 
 默认配置不需要密钥：
