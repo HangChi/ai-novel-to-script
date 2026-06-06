@@ -50,11 +50,17 @@ function Start-Backend {
     throw "Python was not found. Install Python and backend/requirements.txt first."
   }
 
-  Start-Process `
-    -FilePath $pythonCommand.Source `
-    -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$BackendPort" `
-    -WorkingDirectory $BackendDir `
-    -WindowStyle Hidden
+  $previousFrontendPort = $env:FRONTEND_PORT
+  $env:FRONTEND_PORT = "$FrontendPort"
+  try {
+    Start-Process `
+      -FilePath $pythonCommand.Source `
+      -ArgumentList "main.py", "-p", "$BackendPort", "--frontend-port", "$FrontendPort" `
+      -WorkingDirectory $BackendDir `
+      -WindowStyle Hidden
+  } finally {
+    $env:FRONTEND_PORT = $previousFrontendPort
+  }
 
   Write-Host "Starting backend: $healthUrl"
 }
@@ -74,11 +80,17 @@ function Start-Frontend {
     throw "Frontend dependencies were not found. Run npm install under frontend/ first."
   }
 
-  Start-Process `
-    -FilePath $node `
-    -ArgumentList $viteBin, "--host", "127.0.0.1", "--port", "$FrontendPort" `
-    -WorkingDirectory $FrontendDir `
-    -WindowStyle Hidden
+  $previousApiBaseUrl = $env:VITE_API_BASE_URL
+  $env:VITE_API_BASE_URL = "http://127.0.0.1:$BackendPort"
+  try {
+    Start-Process `
+      -FilePath $node `
+      -ArgumentList $viteBin, "--host", "127.0.0.1", "--port", "$FrontendPort" `
+      -WorkingDirectory $FrontendDir `
+      -WindowStyle Hidden
+  } finally {
+    $env:VITE_API_BASE_URL = $previousApiBaseUrl
+  }
 
   Write-Host "Starting frontend: $frontendUrl"
 }

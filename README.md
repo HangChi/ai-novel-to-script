@@ -71,7 +71,7 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
 .\.venv\Scripts\python -m pytest
-.\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
+.\.venv\Scripts\python main.py -p 8000 --reload
 ```
 
 后端健康检查地址：
@@ -144,6 +144,19 @@ npm run dev
 
 ```text
 http://127.0.0.1:5173
+```
+
+`npm run dev` 会固定使用 `5173` 端口；如果端口已被占用，Vite 会直接报错而不是自动切到其它端口，避免前端端口变化后被后端 CORS 拦截。需要自定义端口时，后端和前端端口必须成对配置，例如：
+
+```powershell
+# 终端 1
+cd backend
+.\.venv\Scripts\python main.py -p 8000 --frontend-port 5174
+
+# 终端 2
+cd frontend
+$env:VITE_API_BASE_URL="http://127.0.0.1:8000"
+npm run dev -- --port 5174
 ```
 
 ### 浏览器端到端烟测（可选）
