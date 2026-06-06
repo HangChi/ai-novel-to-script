@@ -114,7 +114,28 @@ async function postJson(url, payload) {
   return body;
 }
 
+async function getJson(url) {
+  const response = await fetch(url);
+  const body = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(`${url} returned ${response.status}: ${JSON.stringify(body)}`);
+  }
+
+  return body;
+}
+
 async function runApiSmoke() {
+  const aiStatus = await getJson(`${backendBaseUrl}/api/ai/status`);
+
+  if (aiStatus.provider !== "local" || aiStatus.mode !== "local" || aiStatus.configured !== true) {
+    throw new Error(`unexpected AI provider status: ${JSON.stringify(aiStatus)}`);
+  }
+
+  if (JSON.stringify(aiStatus).includes("API_KEY")) {
+    throw new Error("local AI provider status should not expose API key fields");
+  }
+
   const content = await readFile(sampleNovelPath, "utf-8");
   const generated = await postJson(`${backendBaseUrl}/api/scripts/generate`, {
     title: "rain-letter",
@@ -175,6 +196,14 @@ async function runBrowserSmoke() {
     const normalizedSampleNovelText = sampleNovelText.replace(/\r\n/g, "\n");
 
     await page.goto(frontendBaseUrl, { waitUntil: "networkidle" });
+    await page.waitForFunction(
+      () => {
+        const statusText = document.querySelector('[data-testid="ai-provider-status"]')?.textContent ?? "";
+        return statusText.includes("本地骨架") && statusText.includes("配置正常");
+      },
+      null,
+      { timeout: 10_000 },
+    );
     await page.getByTestId("source-file-input").setInputFiles(sampleNovelPath);
     await page.waitForFunction(
       (expectedText) => {

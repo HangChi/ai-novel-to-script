@@ -1,8 +1,9 @@
-import { type ChangeEvent, useState } from "react";
+import { type ChangeEvent, useEffect, useState } from "react";
 
 import "./App.css";
 
 type HealthStatus = "idle" | "checking" | "ok" | "error";
+type AIProviderStatusState = "idle" | "loading" | "ready" | "warning" | "error";
 type GenerationStatus = "idle" | "generating" | "success" | "error";
 type ImportStatus = "idle" | "importing" | "success" | "error";
 type ValidationStatus = "idle" | "validating" | "valid" | "invalid" | "error";
@@ -28,6 +29,15 @@ type ScriptValidationError = {
 type ValidateScriptResponse = {
   valid: boolean;
   errors: ScriptValidationError[];
+};
+
+type AIProviderStatusResponse = {
+  provider: string;
+  mode: "local" | "remote" | "unsupported";
+  configured: boolean;
+  model: string;
+  base_url: string;
+  missing_config: string[];
 };
 
 type ApiErrorResponse = {
@@ -953,9 +963,57 @@ function displayValue(value: string, fallback = "未填写") {
   return value.trim() || fallback;
 }
 
+function getAIProviderName(status: AIProviderStatusResponse | null) {
+  if (!status) {
+    return "AI 状态";
+  }
+
+  if (status.provider === "local") {
+    return "本地骨架";
+  }
+
+  if (status.provider === "deepseek") {
+    return "DeepSeek";
+  }
+
+  if (status.provider === "openai") {
+    return "OpenAI-compatible";
+  }
+
+  return status.provider;
+}
+
+function getAIProviderDetail(status: AIProviderStatusResponse | null) {
+  if (!status) {
+    return "未检测";
+  }
+
+  if (status.mode === "unsupported") {
+    return "不支持的 Provider";
+  }
+
+  if (!status.configured) {
+    return `缺少 ${status.missing_config.join(", ")}`;
+  }
+
+  if (status.mode === "local") {
+    return "配置正常，无需密钥";
+  }
+
+  return `${status.model} · 配置正常`;
+}
+
+function getAIProviderGenerationLabel(status: AIProviderStatusResponse | null) {
+  const providerName = getAIProviderName(status);
+
+  return providerName === "AI 状态" ? "AI Provider" : providerName;
+}
+
 function App() {
   const [healthStatus, setHealthStatus] = useState<HealthStatus>("idle");
   const [healthMessage, setHealthMessage] = useState("未检测");
+  const [aiProviderStatusState, setAIProviderStatusState] = useState<AIProviderStatusState>("idle");
+  const [aiProviderStatus, setAIProviderStatus] = useState<AIProviderStatusResponse | null>(null);
   const [generationStatus, setGenerationStatus] = useState<GenerationStatus>("idle");
   const [generationMessage, setGenerationMessage] = useState("待生成");
   const [importStatus, setImportStatus] = useState<ImportStatus>("idle");
@@ -973,12 +1031,18 @@ function App() {
   const characterCount = sourceText.trim().length;
   const chapterCount = countLikelyChapters(sourceText);
   const isGenerating = generationStatus === "generating";
+  const isProviderBlocked =
+    Boolean(aiProviderStatus && !aiProviderStatus.configured) || aiProviderStatus?.mode === "unsupported";
   const isValidating = validationStatus === "validating";
   const isCopying = copyStatus === "copying";
   const inputMessage = importStatus === "idle" ? generationMessage : importMessage;
   const inputMessageStatus = importStatus === "idle" ? generationStatus : importStatus;
   const copyButtonLabel = copyStatus === "copied" ? "已复制" : copyStatus === "error" ? "复制失败" : "复制 YAML";
   const structuredPreview = parseStructuredScriptPreview(yamlText);
+
+  useEffect(() => {
+    void checkAIProviderStatus();
+  }, []);
 
   function resetValidationState(message = "待校验") {
     setValidationStatus("idle");
@@ -1068,15 +1132,36 @@ function App() {
 
       setHealthStatus("ok");
       setHealthMessage("已连接");
+      await checkAIProviderStatus();
     } catch {
       setHealthStatus("error");
       setHealthMessage("未连接");
     }
   }
 
+  async function checkAIProviderStatus() {
+    setAIProviderStatusState("loading");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/ai/status`);
+
+      if (!response.ok) {
+        throw new Error(`AI status check failed with ${response.status}`);
+      }
+
+      const payload = (await response.json()) as AIProviderStatusResponse;
+
+      setAIProviderStatus(payload);
+      setAIProviderStatusState(payload.configured && payload.mode !== "unsupported" ? "ready" : "warning");
+    } catch {
+      setAIProviderStatus(null);
+      setAIProviderStatusState("error");
+    }
+  }
+
   async function generateScript() {
     setGenerationStatus("generating");
-    setGenerationMessage("生成中");
+    setGenerationMessage(`正在调用 ${getAIProviderGenerationLabel(aiProviderStatus)} 生成`);
     setImportStatus("idle");
     resetValidationState("生成中，待校验");
     setCopyStatus("idle");
@@ -1104,7 +1189,7 @@ function App() {
       updateYamlText(result.yaml, "生成结果已同步到 YAML 和结构化视图。");
       setYamlMode("preview");
       setGenerationStatus("success");
-      setGenerationMessage(`已生成 schema ${result.schema_version}`);
+      setGenerationMessage(`${getAIProviderGenerationLabel(aiProviderStatus)} 已生成 schema ${result.schema_version}`);
       setValidationMessage("已生成，待校验");
     } catch (error) {
       setGenerationStatus("error");
@@ -1241,6 +1326,11 @@ function App() {
           <h1>小说转剧本工作台</h1>
         </div>
         <div className="topbar-actions">
+          <div className={`ai-status-card ${aiProviderStatusState}`} data-testid="ai-provider-status">
+            <span>AI</span>
+            <strong>{getAIProviderName(aiProviderStatus)}</strong>
+            <small>{aiProviderStatusState === "loading" ? "检测中" : getAIProviderDetail(aiProviderStatus)}</small>
+          </div>
           <span className={`status-pill ${healthStatus}`}>{healthMessage}</span>
           <button
             className="status-button"
@@ -1325,7 +1415,7 @@ function App() {
               data-testid="generate-yaml-button"
               type="button"
               onClick={generateScript}
-              disabled={isGenerating}
+              disabled={isGenerating || isProviderBlocked}
             >
               {isGenerating ? "生成中..." : "生成 YAML"}
             </button>

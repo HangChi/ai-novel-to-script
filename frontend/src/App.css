@@ -57,6 +57,51 @@ h3 {
   gap: 10px;
 }
 
+.ai-status-card {
+  display: grid;
+  min-width: 210px;
+  gap: 2px;
+  border: 1px solid #d8dee7;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px 12px;
+}
+
+.ai-status-card span,
+.ai-status-card small {
+  color: #607086;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.ai-status-card strong {
+  color: #1d2b3d;
+  font-size: 0.92rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.ai-status-card small {
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.ai-status-card.ready {
+  border-color: #cbe4d8;
+  background: #f4fbf7;
+}
+
+.ai-status-card.warning,
+.ai-status-card.loading {
+  border-color: #ecd9a8;
+  background: #fffaf0;
+}
+
+.ai-status-card.error {
+  border-color: #efc8c3;
+  background: #fff6f5;
+}
+
 .status-button {
   min-width: 112px;
   border: 1px solid #243247;
@@ -896,6 +941,10 @@ textarea::placeholder {
   .topbar-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .ai-status-card {
+    width: 100%;
   }
 
   .status-button {
