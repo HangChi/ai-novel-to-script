@@ -227,6 +227,21 @@ async function runBrowserSmoke() {
     await page.getByTestId("structured-scene-title-input-0").fill("Opening at the Teahouse");
     await page.getByTestId("structured-scene-location-input-0").fill("Old teahouse entrance");
     await page.getByTestId("structured-scene-time-input-0").fill("Rainy evening");
+    await page.getByTestId("structured-beat-type-select-0-0").selectOption("action");
+    await page.getByTestId("structured-beat-text-input-0-0").fill("Lin steps through the rain-soaked teahouse door.");
+    await page.getByTestId("structured-add-beat-button-0").click();
+    await page.getByTestId("structured-beat-type-select-0-1").selectOption("transition");
+    await page.getByTestId("structured-beat-text-input-0-1").fill("Cut to the hidden letter.");
+    await page.waitForFunction(
+      () => {
+        const previewText = document.querySelector('[data-testid="yaml-preview"]')?.textContent ?? "";
+        return previewText.includes('type: "transition"')
+          && previewText.includes('text: "Cut to the hidden letter."');
+      },
+      null,
+      { timeout: 10_000 },
+    );
+    await page.getByTestId("structured-beat-delete-button-0-1").click();
     await page.waitForFunction(
       () => {
         const previewText = document.querySelector('[data-testid="yaml-preview"]')?.textContent ?? "";
@@ -234,7 +249,10 @@ async function runBrowserSmoke() {
           && previewText.includes('logline: "A letter pulls two strangers toward a dawn choice."')
           && previewText.includes('title: "Opening at the Teahouse"')
           && previewText.includes('location: "Old teahouse entrance"')
-          && previewText.includes('time: "Rainy evening"');
+          && previewText.includes('time: "Rainy evening"')
+          && previewText.includes('type: "action"')
+          && previewText.includes('text: "Lin steps through the rain-soaked teahouse door."')
+          && !previewText.includes("Cut to the hidden letter.");
       },
       null,
       { timeout: 10_000 },
@@ -248,7 +266,8 @@ async function runBrowserSmoke() {
     if (!clipboardText.includes("script:")
       || !clipboardText.includes('title: "Rain Letter Script"')
       || !clipboardText.includes('location: "Old teahouse entrance"')
-      || !clipboardText.includes("type: narration")) {
+      || !clipboardText.includes('type: "action"')
+      || !clipboardText.includes('text: "Lin steps through the rain-soaked teahouse door."')) {
       throw new Error("copied YAML did not match the generated script");
     }
 
@@ -270,7 +289,8 @@ async function runBrowserSmoke() {
     if (!downloadedYaml.includes("script:")
       || !downloadedYaml.includes('logline: "A letter pulls two strangers toward a dawn choice."')
       || !downloadedYaml.includes('time: "Rainy evening"')
-      || !downloadedYaml.includes("type: narration")) {
+      || !downloadedYaml.includes('type: "action"')
+      || downloadedYaml.includes("Cut to the hidden letter.")) {
       throw new Error("downloaded YAML did not match the generated script");
     }
 
