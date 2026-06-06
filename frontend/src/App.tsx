@@ -316,7 +316,7 @@ function updateBeatStringField(
   yamlText: string,
   sceneIndex: number,
   beatIndex: number,
-  fieldName: "type" | "text",
+  fieldName: "type" | "text" | "character",
   value: string,
 ) {
   const lines = yamlText.split(/\r?\n/);
@@ -339,6 +339,20 @@ function updateBeatStringField(
       ensureDialogueCharacter(lines, beatRange);
     }
 
+    return lines.join("\n");
+  }
+
+  if (fieldName === "character") {
+    const characterLine = `          character: "${escapeYamlDoubleQuotedValue(value)}"`;
+
+    for (let index = beatRange.start + 1; index < beatRange.end; index += 1) {
+      if (/^          character:\s*.*$/.test(lines[index])) {
+        lines[index] = characterLine;
+        return lines.join("\n");
+      }
+    }
+
+    lines.splice(beatRange.start + 1, 0, characterLine);
     return lines.join("\n");
   }
 
@@ -671,7 +685,7 @@ function App() {
     updateStructuredYamlText(updateSceneStringField(yamlText, sceneIndex, fieldName, value));
   }
 
-  function updateBeatMetadata(sceneIndex: number, beatIndex: number, fieldName: "type" | "text", value: string) {
+  function updateBeatMetadata(sceneIndex: number, beatIndex: number, fieldName: "type" | "text" | "character", value: string) {
     updateStructuredYamlText(updateBeatStringField(yamlText, sceneIndex, beatIndex, fieldName, value));
   }
 
@@ -1109,7 +1123,18 @@ function App() {
                                         删除
                                       </button>
                                     </div>
-                                    {beat.character ? <span className="beat-character-label">{beat.character}</span> : null}
+                                    {beat.type === "dialogue" ? (
+                                      <input
+                                        className="beat-character-input"
+                                        data-testid={`structured-beat-character-input-${sceneIndex}-${beatIndex}`}
+                                        value={beat.character ?? ""}
+                                        onChange={(event) => updateBeatMetadata(sceneIndex, beatIndex, "character", event.target.value)}
+                                        placeholder="说话人"
+                                        aria-label={`Beat ${beatIndex + 1} 说话人`}
+                                      />
+                                    ) : beat.character ? (
+                                      <span className="beat-character-label">{beat.character}</span>
+                                    ) : null}
                                     <textarea
                                       data-testid={`structured-beat-text-input-${sceneIndex}-${beatIndex}`}
                                       value={beat.text}
