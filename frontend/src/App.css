@@ -423,7 +423,7 @@ textarea::placeholder {
   gap: 4px;
 }
 
-.script-field span,
+.script-field label,
 .structured-section-heading span,
 .scene-preview-title span {
   color: #617086;
@@ -431,16 +431,34 @@ textarea::placeholder {
   font-weight: 800;
 }
 
-.script-field strong {
+.script-field input,
+.script-field textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d8dee7;
+  border-radius: 6px;
+  background: #ffffff;
   color: #1a2433;
-  font-size: 0.95rem;
-  line-height: 1.45;
+  font: 0.9rem/1.5 inherit;
+  outline: none;
   overflow-wrap: anywhere;
+  padding: 8px 10px;
 }
 
-.logline-field strong {
-  color: #314156;
-  font-weight: 700;
+.script-field textarea {
+  min-height: 74px;
+  resize: vertical;
+}
+
+.script-field input:focus,
+.script-field textarea:focus {
+  border-color: #3b6ea8;
+  box-shadow: 0 0 0 3px rgba(59, 110, 168, 0.12);
+}
+
+.script-field input::placeholder,
+.script-field textarea::placeholder {
+  color: #98a5b3;
 }
 
 .structured-section {
