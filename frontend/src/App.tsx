@@ -9,6 +9,8 @@ type ValidationStatus = "idle" | "validating" | "valid" | "invalid" | "error";
 type CopyStatus = "idle" | "copying" | "copied" | "error";
 type YamlMode = "preview" | "edit";
 
+type StructuredPreviewStatus = "ready" | "empty" | "error";
+
 type GenerateScriptResponse = {
   status: "completed";
   schema_version: string;
@@ -32,6 +34,45 @@ type ApiErrorResponse = {
     message?: string;
   };
 };
+
+type StructuredCharacter = {
+  id: string;
+  name: string;
+  role: string;
+  description: string;
+};
+
+type StructuredBeat = {
+  type: string;
+  text: string;
+  character?: string;
+};
+
+type StructuredScene = {
+  id: string;
+  title: string;
+  location: string;
+  time: string;
+  characters: string[];
+  beats: StructuredBeat[];
+};
+
+type StructuredScript = {
+  title: string;
+  logline: string;
+  characters: StructuredCharacter[];
+  scenes: StructuredScene[];
+};
+
+type StructuredPreviewResult =
+  | {
+      status: "ready";
+      script: StructuredScript;
+    }
+  | {
+      status: Exclude<StructuredPreviewStatus, "ready">;
+      message: string;
+    };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const SAMPLE_TITLE = "雨夜来信";
@@ -70,6 +111,214 @@ function getFileTitle(fileName: string) {
   return title || "未命名剧本";
 }
 
+function readYamlScalar(rawValue: string) {
+  const value = rawValue.trim();
+
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    return value.slice(1, -1);
+  }
+
+  return value;
+}
+
+function getIndentedSection(lines: string[], startIndex: number, parentIndent: number) {
+  const section: string[] = [];
+
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+
+    if (!line.trim()) {
+      section.push(line);
+      continue;
+    }
+
+    const indent = line.match(/^ */)?.[0].length ?? 0;
+
+    if (indent <= parentIndent) {
+      break;
+    }
+
+    section.push(line);
+  }
+
+  return section;
+}
+
+function readScriptField(lines: string[], fieldName: string) {
+  const fieldPattern = new RegExp(`^  ${fieldName}:\\s*(.*)$`);
+  const line = lines.find((candidate) => fieldPattern.test(candidate));
+  const match = line?.match(fieldPattern);
+
+  return match ? readYamlScalar(match[1]) : "";
+}
+
+function parseStructuredCharacters(lines: string[]) {
+  const charactersIndex = lines.findIndex((line) => /^  characters:\s*(?:\[\])?\s*$/.test(line));
+
+  if (charactersIndex < 0 || /\[\]\s*$/.test(lines[charactersIndex])) {
+    return [];
+  }
+
+  const characters: StructuredCharacter[] = [];
+  const section = getIndentedSection(lines, charactersIndex, 2);
+  let currentCharacter: StructuredCharacter | null = null;
+
+  for (const line of section) {
+    const itemMatch = line.match(/^    -\s+id:\s*(.*)$/);
+    const fieldMatch = line.match(/^      (name|role|description):\s*(.*)$/);
+
+    if (itemMatch) {
+      currentCharacter = {
+        id: readYamlScalar(itemMatch[1]),
+        name: "",
+        role: "",
+        description: "",
+      };
+      characters.push(currentCharacter);
+      continue;
+    }
+
+    if (currentCharacter && fieldMatch) {
+      currentCharacter[fieldMatch[1] as keyof Omit<StructuredCharacter, "id">] = readYamlScalar(fieldMatch[2]);
+    }
+  }
+
+  return characters;
+}
+
+function parseStructuredScenes(lines: string[]) {
+  const scenesIndex = lines.findIndex((line) => /^  scenes:\s*(?:\[\])?\s*$/.test(line));
+
+  if (scenesIndex < 0 || /\[\]\s*$/.test(lines[scenesIndex])) {
+    return [];
+  }
+
+  const scenes: StructuredScene[] = [];
+  const section = getIndentedSection(lines, scenesIndex, 2);
+  let currentScene: StructuredScene | null = null;
+  let currentBeat: StructuredBeat | null = null;
+  let mode: "sceneCharacters" | "beats" | null = null;
+
+  for (const line of section) {
+    const sceneMatch = line.match(/^    -\s+id:\s*(.*)$/);
+
+    if (sceneMatch) {
+      currentScene = {
+        id: readYamlScalar(sceneMatch[1]),
+        title: "",
+        location: "",
+        time: "",
+        characters: [],
+        beats: [],
+      };
+      currentBeat = null;
+      mode = null;
+      scenes.push(currentScene);
+      continue;
+    }
+
+    if (!currentScene) {
+      continue;
+    }
+
+    const sceneFieldMatch = line.match(/^      (title|location|time):\s*(.*)$/);
+
+    if (sceneFieldMatch) {
+      currentScene[sceneFieldMatch[1] as keyof Pick<StructuredScene, "title" | "location" | "time">] = readYamlScalar(sceneFieldMatch[2]);
+      mode = null;
+      continue;
+    }
+
+    if (/^      characters:\s*\[\]\s*$/.test(line)) {
+      currentScene.characters = [];
+      mode = null;
+      continue;
+    }
+
+    if (/^      characters:\s*$/.test(line)) {
+      mode = "sceneCharacters";
+      continue;
+    }
+
+    if (/^      beats:\s*(?:\[\])?\s*$/.test(line)) {
+      mode = /\[\]\s*$/.test(line) ? null : "beats";
+      currentBeat = null;
+      continue;
+    }
+
+    if (mode === "sceneCharacters") {
+      const characterMatch = line.match(/^        -\s*(.*)$/);
+
+      if (characterMatch) {
+        currentScene.characters.push(readYamlScalar(characterMatch[1]));
+      }
+
+      continue;
+    }
+
+    if (mode === "beats") {
+      const beatMatch = line.match(/^        -\s+type:\s*(.*)$/);
+      const beatFieldMatch = line.match(/^          (text|character):\s*(.*)$/);
+
+      if (beatMatch) {
+        currentBeat = {
+          type: readYamlScalar(beatMatch[1]),
+          text: "",
+        };
+        currentScene.beats.push(currentBeat);
+        continue;
+      }
+
+      if (currentBeat && beatFieldMatch) {
+        currentBeat[beatFieldMatch[1] as keyof Pick<StructuredBeat, "text" | "character">] = readYamlScalar(beatFieldMatch[2]);
+      }
+    }
+  }
+
+  return scenes;
+}
+
+function parseStructuredScriptPreview(yamlText: string): StructuredPreviewResult {
+  if (!yamlText.trim()) {
+    return {
+      status: "empty",
+      message: "暂无 YAML 内容可预览。",
+    };
+  }
+
+  const lines = yamlText.split(/\r?\n/);
+
+  if (!lines.some((line) => line.trim() === "script:")) {
+    return {
+      status: "error",
+      message: "未找到 script 根节点，暂时无法生成结构化预览。",
+    };
+  }
+
+  const script = {
+    title: readScriptField(lines, "title"),
+    logline: readScriptField(lines, "logline"),
+    characters: parseStructuredCharacters(lines),
+    scenes: parseStructuredScenes(lines),
+  };
+
+  if (!script.title && !script.logline && script.characters.length === 0 && script.scenes.length === 0) {
+    return {
+      status: "empty",
+      message: "当前 YAML 还没有可展示的剧本标题、人物或场景。",
+    };
+  }
+
+  return {
+    status: "ready",
+    script,
+  };
+}
+
+function displayValue(value: string, fallback = "未填写") {
+  return value.trim() || fallback;
+}
+
 function App() {
   const [healthStatus, setHealthStatus] = useState<HealthStatus>("idle");
   const [healthMessage, setHealthMessage] = useState("未检测");
@@ -94,6 +343,7 @@ function App() {
   const inputMessage = importStatus === "idle" ? generationMessage : importMessage;
   const inputMessageStatus = importStatus === "idle" ? generationStatus : importStatus;
   const copyButtonLabel = copyStatus === "copied" ? "已复制" : copyStatus === "error" ? "复制失败" : "复制 YAML";
+  const structuredPreview = parseStructuredScriptPreview(yamlText);
 
   function resetValidationState(message = "待校验") {
     setValidationStatus("idle");
@@ -467,6 +717,100 @@ function App() {
               </ul>
             ) : null}
           </div>
+          <section className="structured-preview-panel" data-testid="structured-preview" aria-label="YAML 结构化预览">
+            <div className="structured-preview-heading">
+              <div>
+                <p className="panel-kicker">Structure</p>
+                <h3>结构化预览</h3>
+              </div>
+              <span>
+                {structuredPreview.status === "ready"
+                  ? `${structuredPreview.script.scenes.length} 场景`
+                  : "待解析"}
+              </span>
+            </div>
+            {structuredPreview.status === "ready" ? (
+              <div className="structured-preview-content">
+                <div className="script-overview">
+                  <div className="script-field">
+                    <span>剧本标题</span>
+                    <strong data-testid="structured-title">{displayValue(structuredPreview.script.title)}</strong>
+                  </div>
+                  <div className="script-field logline-field">
+                    <span>Logline</span>
+                    <strong data-testid="structured-logline">{displayValue(structuredPreview.script.logline)}</strong>
+                  </div>
+                </div>
+
+                <div className="structured-section">
+                  <div className="structured-section-heading">
+                    <strong>人物</strong>
+                    <span>{structuredPreview.script.characters.length}</span>
+                  </div>
+                  {structuredPreview.script.characters.length > 0 ? (
+                    <ul className="character-preview-list">
+                      {structuredPreview.script.characters.map((character, index) => (
+                        <li key={`${character.id}-${character.name}-${index}`}>
+                          <strong>{displayValue(character.name, character.id || "未命名人物")}</strong>
+                          <span>{displayValue(character.role, "角色待补充")}</span>
+                          <p>{displayValue(character.description, "描述待补充")}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="structured-empty">暂无人物</p>
+                  )}
+                </div>
+
+                <div className="structured-section">
+                  <div className="structured-section-heading">
+                    <strong>场景</strong>
+                    <span>{structuredPreview.script.scenes.length}</span>
+                  </div>
+                  {structuredPreview.script.scenes.length > 0 ? (
+                    <ol className="scene-preview-list">
+                      {structuredPreview.script.scenes.map((scene, sceneIndex) => (
+                        <li key={`${scene.id}-${scene.title}-${sceneIndex}`} data-testid="structured-scene">
+                          <div className="scene-preview-title">
+                            <strong>{displayValue(scene.title, scene.id || `场景 ${sceneIndex + 1}`)}</strong>
+                            <span>
+                              {displayValue(scene.location)} / {displayValue(scene.time)}
+                            </span>
+                          </div>
+                          {scene.characters.length > 0 ? (
+                            <div className="scene-character-row">
+                              {scene.characters.map((character, index) => (
+                                <span key={`${scene.id}-${character}-${index}`}>{character}</span>
+                              ))}
+                            </div>
+                          ) : null}
+                          {scene.beats.length > 0 ? (
+                            <ul className="beat-preview-list">
+                              {scene.beats.map((beat, beatIndex) => (
+                                <li key={`${scene.id}-${beat.type}-${beatIndex}`} data-testid="structured-beat">
+                                  <span className="beat-type-label">{displayValue(beat.type, "unknown")}</span>
+                                  <p>
+                                    {beat.character ? <strong>{beat.character}：</strong> : null}
+                                    {displayValue(beat.text, "内容待补充")}
+                                  </p>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="structured-empty">暂无 beats</p>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="structured-empty">暂无场景</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className={`structured-message ${structuredPreview.status}`}>{structuredPreview.message}</p>
+            )}
+          </section>
         </section>
       </main>
     </div>
