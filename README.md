@@ -248,6 +248,24 @@ script:
 
 `-RunSmoke` 会在启动或复用前后端后运行真实浏览器 E2E，覆盖打开页面、AI Provider 状态展示、导入示例、生成 YAML、查看结构化预览、编辑标题/logline/场景信息/beats、校验 YAML、复制和下载。首次运行前需先在 `frontend` 目录执行 `npm install` 和 `npm run e2e:install`。
 
+停止本地演示：
+
+```powershell
+.\scripts\stop-local-demo.ps1
+```
+
+如果只想查看会停止哪些进程，可先运行：
+
+```powershell
+.\scripts\stop-local-demo.ps1 -DryRun
+```
+
+如果启动演示时使用了自定义端口，请传入对应端口：
+
+```powershell
+.\scripts\stop-local-demo.ps1 -Ports 8001,5174
+```
+
 ### 页面演示
 
 1. 打开 `http://127.0.0.1:5173`。
