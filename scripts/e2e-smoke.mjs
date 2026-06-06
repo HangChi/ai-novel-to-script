@@ -202,6 +202,23 @@ async function runBrowserSmoke() {
       throw new Error("generated YAML did not include a narration beat");
     }
 
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="structured-title"]')?.textContent?.includes("rain-letter-novel"),
+      null,
+      { timeout: 10_000 },
+    );
+
+    const sceneCount = await page.getByTestId("structured-scene").count();
+    const beatCount = await page.getByTestId("structured-beat").count();
+
+    if (sceneCount !== 3) {
+      throw new Error(`structured preview rendered ${sceneCount} scenes`);
+    }
+
+    if (beatCount < 3) {
+      throw new Error(`structured preview rendered ${beatCount} beats`);
+    }
+
     await page.getByTestId("validate-yaml-button").click();
     await page.locator(".validation-panel.valid").waitFor({ timeout: 10_000 });
 
