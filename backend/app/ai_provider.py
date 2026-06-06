@@ -53,13 +53,20 @@ class OpenAICompatibleScriptAIProvider:
     base_url: str = "https://api.openai.com/v1"
     temperature: float = 0.3
     timeout_seconds: float = 60.0
+    provider_name: str = "openai"
+    api_key_env_name: str = "OPENAI_API_KEY"
+    model_env_name: str = "OPENAI_MODEL"
 
     def __post_init__(self) -> None:
         if not self.api_key:
-            raise AIProviderError("OPENAI_API_KEY is required when AI_PROVIDER=openai.")
+            raise AIProviderError(
+                f"{self.api_key_env_name} is required when AI_PROVIDER={self.provider_name}."
+            )
 
         if not self.model:
-            raise AIProviderError("OPENAI_MODEL is required when AI_PROVIDER=openai.")
+            raise AIProviderError(
+                f"{self.model_env_name} is required when AI_PROVIDER={self.provider_name}."
+            )
 
     def generate_script_yaml(self, title: str, skeleton_yaml: str) -> str:
         payload = {
@@ -177,6 +184,18 @@ def create_ai_provider_from_env() -> ScriptAIProvider:
             base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
             temperature=_read_float_env("OPENAI_TEMPERATURE", 0.3),
             timeout_seconds=_read_float_env("AI_PROVIDER_TIMEOUT_SECONDS", 60.0),
+        )
+
+    if provider_name == "deepseek":
+        return OpenAICompatibleScriptAIProvider(
+            api_key=os.getenv("DEEPSEEK_API_KEY", ""),
+            model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+            base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+            temperature=_read_float_env("DEEPSEEK_TEMPERATURE", 0.3),
+            timeout_seconds=_read_float_env("AI_PROVIDER_TIMEOUT_SECONDS", 60.0),
+            provider_name="deepseek",
+            api_key_env_name="DEEPSEEK_API_KEY",
+            model_env_name="DEEPSEEK_MODEL",
         )
 
     raise AIProviderError(f"Unsupported AI_PROVIDER: {provider_name}.")
