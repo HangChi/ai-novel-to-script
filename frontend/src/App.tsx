@@ -887,22 +887,22 @@ function App() {
         </div>
       </header>
 
-      <main className="workspace-shell">
-        <aside className="summary-rail" aria-label="草稿概览">
-          <div className="metric-block">
-            <span>章节</span>
-            <strong>{chapterCount}</strong>
-          </div>
-          <div className="metric-block">
-            <span>字数</span>
-            <strong>{characterCount}</strong>
-          </div>
-          <div className="metric-block">
-            <span>状态</span>
-            <strong>{chapterCount >= 3 ? "可生成" : "待补全"}</strong>
-          </div>
-        </aside>
+      <aside className="summary-rail" aria-label="草稿概览">
+        <div className="metric-block">
+          <span>章节</span>
+          <strong>{chapterCount}</strong>
+        </div>
+        <div className="metric-block">
+          <span>字数</span>
+          <strong>{characterCount}</strong>
+        </div>
+        <div className="metric-block">
+          <span>状态</span>
+          <strong>{chapterCount >= 3 ? "可生成" : "待补全"}</strong>
+        </div>
+      </aside>
 
+      <main className="workspace-shell">
         <section className="editor-panel input-panel">
           <div className="panel-heading">
             <div>
@@ -1043,7 +1043,9 @@ function App() {
               </ul>
             ) : null}
           </div>
-          <section className="structured-preview-panel" data-testid="structured-preview" aria-label="YAML 结构化预览">
+        </section>
+
+        <section className="editor-panel structure-panel structured-preview-panel" data-testid="structured-preview" aria-label="YAML 结构化预览">
             <div className="structured-preview-heading">
               <div>
                 <p className="panel-kicker">Structure</p>
@@ -1220,7 +1222,6 @@ function App() {
             ) : (
               <p className={`structured-message ${structuredPreview.status}`}>{structuredPreview.message}</p>
             )}
-          </section>
         </section>
       </main>
     </div>
