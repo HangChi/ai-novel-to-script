@@ -44,6 +44,7 @@ h1 {
 
 h2 {
   font-size: 1.02rem;
+  white-space: nowrap;
 }
 
 h3 {
@@ -74,31 +75,34 @@ h3 {
 
 .workspace-shell {
   display: grid;
-  grid-template-columns: 172px minmax(0, 1.08fr) minmax(0, 0.92fr);
+  grid-template-columns: minmax(300px, 0.88fr) minmax(360px, 1fr) minmax(360px, 1fr);
   gap: 18px;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
-  padding: 22px 32px 32px;
+  padding: 14px 32px 32px;
 }
 
 .summary-rail {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  flex: 0 0 auto;
   min-height: 0;
-  flex-direction: column;
-  gap: 12px;
-  overflow: auto;
+  padding: 12px 32px 0;
 }
 
 .metric-block {
   display: flex;
-  min-height: 96px;
-  flex-direction: column;
+  min-height: 52px;
+  align-items: center;
+  flex-direction: row;
   justify-content: space-between;
+  gap: 12px;
   border: 1px solid #d8dee7;
   border-radius: 8px;
   background: #ffffff;
-  padding: 14px;
+  padding: 10px 14px;
 }
 
 .metric-block span {
@@ -109,7 +113,7 @@ h3 {
 
 .metric-block strong {
   color: #1a2433;
-  font-size: 1.55rem;
+  font-size: 1.15rem;
   letter-spacing: 0;
 }
 
@@ -129,7 +133,7 @@ h3 {
   display: flex;
   min-height: 66px;
   flex: 0 0 auto;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   padding: 14px 18px;
@@ -154,6 +158,7 @@ h3 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  justify-content: flex-end;
 }
 
 .ghost-button {
@@ -303,6 +308,10 @@ textarea::placeholder {
   background: #fbfcfd;
 }
 
+.structure-panel {
+  border-top: 4px solid #6a5f9f;
+}
+
 .schema-badge {
   display: inline-flex;
   align-items: center;
@@ -400,12 +409,11 @@ textarea::placeholder {
 
 .structured-preview-panel {
   display: flex;
-  min-height: 220px;
-  max-height: 42%;
-  flex: 0 1 42%;
+  min-height: 0;
+  max-height: none;
+  flex: 1 1 auto;
   flex-direction: column;
   overflow: hidden;
-  border-top: 1px solid #dce3ec;
   background: #ffffff;
 }
 
@@ -707,6 +715,17 @@ textarea::placeholder {
   color: #846118;
 }
 
+@media (max-width: 1220px) {
+  .workspace-shell {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: minmax(260px, 0.86fr) minmax(360px, 1.14fr);
+  }
+
+  .input-panel {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 860px) {
   .app-shell {
     height: auto;
@@ -736,6 +755,7 @@ textarea::placeholder {
   .workspace-shell {
     height: auto;
     grid-template-columns: 1fr;
+    grid-template-rows: none;
     overflow: visible;
     padding: 18px;
   }
@@ -745,10 +765,14 @@ textarea::placeholder {
     min-height: 0;
     overflow: visible;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 12px 18px 0;
   }
 
   .metric-block {
-    min-height: 82px;
+    min-height: 58px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 
   .metric-block strong {
