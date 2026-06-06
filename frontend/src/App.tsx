@@ -159,6 +159,101 @@ function updateScriptStringField(yamlText: string, fieldName: "title" | "logline
   return yamlText;
 }
 
+function getSceneRanges(lines: string[]) {
+  const scenesIndex = lines.findIndex((line) => /^  scenes:\s*$/.test(line));
+
+  if (scenesIndex < 0) {
+    return [];
+  }
+
+  const ranges: Array<{ start: number; end: number }> = [];
+
+  for (let index = scenesIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+
+    if (line.trim() && (line.match(/^ */)?.[0].length ?? 0) <= 2) {
+      break;
+    }
+
+    if (/^    -\s+id:\s*.*$/.test(line)) {
+      const previousRange = ranges[ranges.length - 1];
+
+      if (previousRange) {
+        previousRange.end = index;
+      }
+
+      ranges.push({ start: index, end: lines.length });
+    }
+  }
+
+  const lastRange = ranges[ranges.length - 1];
+
+  if (lastRange) {
+    for (let index = lastRange.start + 1; index < lines.length; index += 1) {
+      const line = lines[index];
+
+      if (line.trim() && (line.match(/^ */)?.[0].length ?? 0) <= 2) {
+        lastRange.end = index;
+        break;
+      }
+    }
+  }
+
+  return ranges;
+}
+
+function getSceneFieldOrder(line: string) {
+  if (/^    -\s+id:\s*.*$/.test(line)) {
+    return 0;
+  }
+
+  const match = line.match(/^      (title|source_chapter|location|time|characters|beats):/);
+
+  if (!match) {
+    return -1;
+  }
+
+  return ["id", "title", "source_chapter", "location", "time", "characters", "beats"].indexOf(match[1]);
+}
+
+function updateSceneStringField(
+  yamlText: string,
+  sceneIndex: number,
+  fieldName: "title" | "location" | "time",
+  value: string,
+) {
+  const lines = yamlText.split(/\r?\n/);
+  const range = getSceneRanges(lines)[sceneIndex];
+
+  if (!range) {
+    return yamlText;
+  }
+
+  const fieldPattern = new RegExp(`^      ${fieldName}:\\s*.*$`);
+  const formattedLine = `      ${fieldName}: "${escapeYamlDoubleQuotedValue(value)}"`;
+
+  for (let index = range.start + 1; index < range.end; index += 1) {
+    if (fieldPattern.test(lines[index])) {
+      lines[index] = formattedLine;
+      return lines.join("\n");
+    }
+  }
+
+  const targetOrder = getSceneFieldOrder(`      ${fieldName}:`);
+  let insertAfterIndex = range.start;
+
+  for (let index = range.start; index < range.end; index += 1) {
+    const fieldOrder = getSceneFieldOrder(lines[index]);
+
+    if (fieldOrder >= 0 && fieldOrder < targetOrder) {
+      insertAfterIndex = index;
+    }
+  }
+
+  lines.splice(insertAfterIndex + 1, 0, formattedLine);
+  return lines.join("\n");
+}
+
 function getIndentedSection(lines: string[], startIndex: number, parentIndent: number) {
   const section: string[] = [];
 
@@ -397,6 +492,10 @@ function App() {
 
   function updateScriptMetadata(fieldName: "title" | "logline", value: string) {
     updateYamlText(updateScriptStringField(yamlText, fieldName, value));
+  }
+
+  function updateSceneMetadata(sceneIndex: number, fieldName: "title" | "location" | "time", value: string) {
+    updateYamlText(updateSceneStringField(yamlText, sceneIndex, fieldName, value));
   }
 
   async function checkBackend() {
@@ -826,11 +925,37 @@ function App() {
                     <ol className="scene-preview-list">
                       {structuredPreview.script.scenes.map((scene, sceneIndex) => (
                         <li key={`${scene.id}-${scene.title}-${sceneIndex}`} data-testid="structured-scene">
-                          <div className="scene-preview-title">
-                            <strong>{displayValue(scene.title, scene.id || `场景 ${sceneIndex + 1}`)}</strong>
-                            <span>
-                              {displayValue(scene.location)} / {displayValue(scene.time)}
-                            </span>
+                          <div className="scene-field-grid">
+                            <div className="scene-field">
+                              <label htmlFor={`structured-scene-title-input-${sceneIndex}`}>场景标题</label>
+                              <input
+                                id={`structured-scene-title-input-${sceneIndex}`}
+                                data-testid={`structured-scene-title-input-${sceneIndex}`}
+                                value={scene.title}
+                                onChange={(event) => updateSceneMetadata(sceneIndex, "title", event.target.value)}
+                                placeholder={scene.id || `场景 ${sceneIndex + 1}`}
+                              />
+                            </div>
+                            <div className="scene-field">
+                              <label htmlFor={`structured-scene-location-input-${sceneIndex}`}>地点</label>
+                              <input
+                                id={`structured-scene-location-input-${sceneIndex}`}
+                                data-testid={`structured-scene-location-input-${sceneIndex}`}
+                                value={scene.location}
+                                onChange={(event) => updateSceneMetadata(sceneIndex, "location", event.target.value)}
+                                placeholder="未填写"
+                              />
+                            </div>
+                            <div className="scene-field">
+                              <label htmlFor={`structured-scene-time-input-${sceneIndex}`}>时间</label>
+                              <input
+                                id={`structured-scene-time-input-${sceneIndex}`}
+                                data-testid={`structured-scene-time-input-${sceneIndex}`}
+                                value={scene.time}
+                                onChange={(event) => updateSceneMetadata(sceneIndex, "time", event.target.value)}
+                                placeholder="未填写"
+                              />
+                            </div>
                           </div>
                           {scene.characters.length > 0 ? (
                             <div className="scene-character-row">
