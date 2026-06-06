@@ -199,7 +199,12 @@ async function runBrowserSmoke() {
     await page.waitForFunction(
       () => {
         const statusText = document.querySelector('[data-testid="ai-provider-status"]')?.textContent ?? "";
-        return statusText.includes("本地骨架") && statusText.includes("配置正常");
+        const backendText = document.querySelector('[data-testid="backend-status"]')?.textContent ?? "";
+
+        return statusText.includes("本地骨架")
+          && statusText.includes("配置正常")
+          && backendText.includes("已连接")
+          && backendText.includes("API 已连接");
       },
       null,
       { timeout: 10_000 },

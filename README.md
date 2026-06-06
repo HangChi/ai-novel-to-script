@@ -14,7 +14,7 @@ AI Novel to Script 是一款面向小说作者的 AI 辅助剧本创作工具，
 - 多章节输入：支持至少 3 个章节以上的小说文本。
 - 剧本结构化：自动提取章节、场次、人物、对白、动作、旁白和转场。
 - YAML 输出：生成稳定、可读、可编辑的剧本 YAML。
-- AI 状态展示：顶部展示当前 Provider、模型和配置完整性，远程配置缺失时提示缺少的环境变量。
+- 状态展示：顶部用一致的状态卡展示后端连接、当前 AI Provider、模型和配置完整性，远程配置缺失时提示缺少的环境变量。
 - 结构化预览与局部编辑：将当前 YAML 映射为结构化视图，支持编辑剧本标题、logline、人物、场景基础信息和 beats（含对白说话人）。
 - 自动同步：结构化编辑会即时写回 YAML，并提示当前内容可直接校验、复制或下载。
 - Schema 约束：通过文档定义剧本 YAML Schema，说明字段含义与设计原因。
@@ -200,7 +200,7 @@ script:
 - 输入文本：`docs/examples/rain-letter-novel.txt`
 - 期望 YAML 骨架：`docs/examples/rain-letter-script.yaml`
 
-本地启动前后端后，可先查看页面顶部 AI 状态，确认当前为“本地骨架”或已配置远程 Provider；再在前端导入示例文本，点击“生成 YAML”，查看 YAML 与结构化视图，编辑剧本标题、logline、场景标题、地点、时间和 beats，确认同步状态提示后，再使用“校验 YAML”“复制 YAML”或“下载 YAML”验证完整流程。
+本地启动前后端后，可先查看页面顶部状态卡，确认后端已连接，并确认 AI 当前为“本地骨架”或已配置远程 Provider；再在前端导入示例文本，点击“生成 YAML”，查看 YAML 与结构化视图，编辑剧本标题、logline、场景标题、地点、时间和 beats，确认同步状态提示后，再使用“校验 YAML”“复制 YAML”或“下载 YAML”验证完整流程。
 
 ## 评委复现流程
 
@@ -223,14 +223,14 @@ script:
 .\scripts\start-local-demo.ps1 -RunSmoke
 ```
 
-`-RunSmoke` 会在启动或复用前后端后运行真实浏览器 E2E，覆盖打开页面、AI Provider 状态展示、导入示例、生成 YAML、查看结构化预览、编辑标题/logline/场景信息/beats、校验 YAML、复制和下载。首次运行前需先在 `frontend` 目录执行 `npm install` 和 `npm run e2e:install`。
+`-RunSmoke` 会在启动或复用前后端后运行真实浏览器 E2E，覆盖打开页面、后端与 AI Provider 状态卡、导入示例、生成 YAML、查看结构化预览、编辑标题/logline/场景信息/beats、校验 YAML、复制和下载。首次运行前需先在 `frontend` 目录执行 `npm install` 和 `npm run e2e:install`。
 
 ### 页面演示
 
 1. 打开 `http://127.0.0.1:5173`。
 2. 点击“导入文件”，选择 `docs/examples/rain-letter-novel.txt`。
 3. 点击“生成 YAML”。
-4. 查看顶部 AI 状态，确认显示当前 Provider 和配置状态。
+4. 查看顶部状态卡，确认后端已连接，并确认 AI 显示当前 Provider 和配置状态。
 5. 查看右侧“结构化预览”，确认标题、logline、人物、场景和 beats 已从 YAML 映射到页面。
 6. 修改剧本标题、logline、场景标题、地点、时间和 beats，确认 YAML 内容同步更新，并显示“结构化修改已同步到 YAML”。
 7. 点击“校验 YAML”，确认显示“YAML 结构有效”。
@@ -246,4 +246,4 @@ script:
 
 ## 仓库状态
 
-当前仓库已建立文档、前端、后端、SQL 与部署配置目录，并搭建了基础前后端框架、章节解析、剧本 YAML 初稿骨架、生成接口、YAML 校验接口、AI Provider 状态接口和前端 AI 状态展示、YAML 预览、结构化预览、标题/logline、人物、场景基础信息、登场人物、beats（含对白说话人）结构化编辑与场景增删、同步状态提示、YAML 编辑、校验、复制、下载、本地文本导入能力。后续会逐步补充更完整的双向同步和持久化能力。
+当前仓库已建立文档、前端、后端、SQL 与部署配置目录，并搭建了基础前后端框架、章节解析、剧本 YAML 初稿骨架、生成接口、YAML 校验接口、AI Provider 状态接口和前端后端/AI 状态卡展示、YAML 预览、结构化预览、标题/logline、人物、场景基础信息、登场人物、beats（含对白说话人）结构化编辑与场景增删、同步状态提示、YAML 编辑、校验、复制、下载、本地文本导入能力。后续会逐步补充更完整的双向同步和持久化能力。

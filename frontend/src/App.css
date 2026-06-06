@@ -57,9 +57,9 @@ h3 {
   gap: 10px;
 }
 
-.ai-status-card {
+.topbar-status-card {
   display: grid;
-  min-width: 210px;
+  min-width: 150px;
   gap: 2px;
   border: 1px solid #d8dee7;
   border-radius: 8px;
@@ -67,39 +67,45 @@ h3 {
   padding: 8px 12px;
 }
 
-.ai-status-card span,
-.ai-status-card small {
+.topbar-status-card span,
+.topbar-status-card small {
   color: #607086;
   font-size: 0.72rem;
   font-weight: 800;
 }
 
-.ai-status-card strong {
+.topbar-status-card strong {
   color: #1d2b3d;
   font-size: 0.92rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
-.ai-status-card small {
+.topbar-status-card small {
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
-.ai-status-card.ready {
+.topbar-status-card.ready,
+.topbar-status-card.ok {
   border-color: #cbe4d8;
   background: #f4fbf7;
 }
 
-.ai-status-card.warning,
-.ai-status-card.loading {
+.topbar-status-card.warning,
+.topbar-status-card.loading,
+.topbar-status-card.checking {
   border-color: #ecd9a8;
   background: #fffaf0;
 }
 
-.ai-status-card.error {
+.topbar-status-card.error {
   border-color: #efc8c3;
   background: #fff6f5;
+}
+
+.topbar-status-card.idle {
+  background: #f7f9fc;
 }
 
 .status-button {
@@ -888,32 +894,6 @@ textarea::placeholder {
   color: #a43c33;
 }
 
-.status-pill {
-  display: inline-flex;
-  min-width: 88px;
-  justify-content: center;
-  border-radius: 999px;
-  padding: 4px 10px;
-  background: #edf0f3;
-  color: #596579;
-  font-weight: 700;
-}
-
-.status-pill.ok {
-  background: #e6f4ed;
-  color: #17663a;
-}
-
-.status-pill.error {
-  background: #fdeceb;
-  color: #a43c33;
-}
-
-.status-pill.checking {
-  background: #fff3d9;
-  color: #846118;
-}
-
 @media (max-width: 1220px) {
   .workspace-shell {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -943,7 +923,7 @@ textarea::placeholder {
     flex-direction: column;
   }
 
-  .ai-status-card {
+  .topbar-status-card {
     width: 100%;
   }
 

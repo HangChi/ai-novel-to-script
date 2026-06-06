@@ -963,9 +963,13 @@ function displayValue(value: string, fallback = "未填写") {
   return value.trim() || fallback;
 }
 
-function getAIProviderName(status: AIProviderStatusResponse | null) {
+function getAIProviderName(status: AIProviderStatusResponse | null, statusState: AIProviderStatusState) {
+  if (statusState === "loading") {
+    return "检测中";
+  }
+
   if (!status) {
-    return "AI 状态";
+    return "未检测";
   }
 
   if (status.provider === "local") {
@@ -983,9 +987,25 @@ function getAIProviderName(status: AIProviderStatusResponse | null) {
   return status.provider;
 }
 
-function getAIProviderDetail(status: AIProviderStatusResponse | null) {
+function getAIProviderDetail(
+  status: AIProviderStatusResponse | null,
+  statusState: AIProviderStatusState,
+  backendStatus: HealthStatus,
+) {
+  if (statusState === "loading") {
+    return "正在读取配置";
+  }
+
   if (!status) {
-    return "未检测";
+    if (statusState === "error" && backendStatus === "error") {
+      return "后端未连接";
+    }
+
+    if (statusState === "error") {
+      return "状态接口不可用";
+    }
+
+    return "等待后端检测";
   }
 
   if (status.mode === "unsupported") {
@@ -1004,9 +1024,25 @@ function getAIProviderDetail(status: AIProviderStatusResponse | null) {
 }
 
 function getAIProviderGenerationLabel(status: AIProviderStatusResponse | null) {
-  const providerName = getAIProviderName(status);
+  const providerName = getAIProviderName(status, "ready");
 
-  return providerName === "AI 状态" ? "AI Provider" : providerName;
+  return providerName === "未检测" ? "AI Provider" : providerName;
+}
+
+function getBackendStatusDetail(status: HealthStatus) {
+  if (status === "checking") {
+    return "正在检查 API";
+  }
+
+  if (status === "ok") {
+    return "API 已连接";
+  }
+
+  if (status === "error") {
+    return "无法连接 API";
+  }
+
+  return "等待检测";
 }
 
 function App() {
@@ -1041,7 +1077,7 @@ function App() {
   const structuredPreview = parseStructuredScriptPreview(yamlText);
 
   useEffect(() => {
-    void checkAIProviderStatus();
+    void checkBackend();
   }, []);
 
   function resetValidationState(message = "待校验") {
@@ -1136,6 +1172,8 @@ function App() {
     } catch {
       setHealthStatus("error");
       setHealthMessage("未连接");
+      setAIProviderStatus(null);
+      setAIProviderStatusState("error");
     }
   }
 
@@ -1326,12 +1364,16 @@ function App() {
           <h1>小说转剧本工作台</h1>
         </div>
         <div className="topbar-actions">
-          <div className={`ai-status-card ${aiProviderStatusState}`} data-testid="ai-provider-status">
+          <div className={`topbar-status-card ${aiProviderStatusState}`} data-testid="ai-provider-status">
             <span>AI</span>
-            <strong>{getAIProviderName(aiProviderStatus)}</strong>
-            <small>{aiProviderStatusState === "loading" ? "检测中" : getAIProviderDetail(aiProviderStatus)}</small>
+            <strong>{getAIProviderName(aiProviderStatus, aiProviderStatusState)}</strong>
+            <small>{getAIProviderDetail(aiProviderStatus, aiProviderStatusState, healthStatus)}</small>
           </div>
-          <span className={`status-pill ${healthStatus}`}>{healthMessage}</span>
+          <div className={`topbar-status-card ${healthStatus}`} data-testid="backend-status">
+            <span>后端</span>
+            <strong>{healthMessage}</strong>
+            <small>{getBackendStatusDetail(healthStatus)}</small>
+          </div>
           <button
             className="status-button"
             type="button"
