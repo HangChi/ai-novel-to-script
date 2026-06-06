@@ -466,6 +466,159 @@ function readScriptField(lines: string[], fieldName: string) {
   return match ? readYamlScalar(match[1]) : "";
 }
 
+function getCharacterRanges(lines: string[]) {
+  const charactersIndex = lines.findIndex((line) => /^  characters:\s*$/.test(line));
+
+  if (charactersIndex < 0) {
+    return { charactersIndex, ranges: [] as Array<{ start: number; end: number }> };
+  }
+
+  const ranges: Array<{ start: number; end: number }> = [];
+
+  for (let index = charactersIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+
+    if (line.trim() && (line.match(/^ */)?.[0].length ?? 0) <= 2) {
+      break;
+    }
+
+    if (/^    -\s+id:\s*.*$/.test(line)) {
+      const previousRange = ranges[ranges.length - 1];
+
+      if (previousRange) {
+        previousRange.end = index;
+      }
+
+      ranges.push({ start: index, end: lines.length });
+    }
+  }
+
+  const lastRange = ranges[ranges.length - 1];
+
+  if (lastRange) {
+    for (let index = lastRange.start + 1; index < lines.length; index += 1) {
+      const line = lines[index];
+
+      if (line.trim() && (line.match(/^ */)?.[0].length ?? 0) <= 2) {
+        lastRange.end = index;
+        break;
+      }
+    }
+  }
+
+  return { charactersIndex, ranges };
+}
+
+function getCharacterFieldOrder(fieldName: "id" | "name" | "role" | "description") {
+  return ["id", "name", "role", "description"].indexOf(fieldName);
+}
+
+function nextCharacterId(lines: string[]) {
+  let max = 0;
+
+  for (const line of lines) {
+    const match = line.match(/id:\s*"?char-(\d+)"?/);
+
+    if (match) {
+      max = Math.max(max, Number(match[1]));
+    }
+  }
+
+  return `char-${String(max + 1).padStart(3, "0")}`;
+}
+
+function updateCharacterField(
+  yamlText: string,
+  characterIndex: number,
+  fieldName: "name" | "role" | "description",
+  value: string,
+) {
+  const lines = yamlText.split(/\r?\n/);
+  const range = getCharacterRanges(lines).ranges[characterIndex];
+
+  if (!range) {
+    return yamlText;
+  }
+
+  const fieldPattern = new RegExp(`^      ${fieldName}:\\s*.*$`);
+  const formattedLine = `      ${fieldName}: "${escapeYamlDoubleQuotedValue(value)}"`;
+
+  for (let index = range.start + 1; index < range.end; index += 1) {
+    if (fieldPattern.test(lines[index])) {
+      lines[index] = formattedLine;
+      return lines.join("\n");
+    }
+  }
+
+  const targetOrder = getCharacterFieldOrder(fieldName);
+  let insertAfterIndex = range.start;
+
+  for (let index = range.start; index < range.end; index += 1) {
+    const fieldMatch = lines[index].match(/^      (name|role|description):/);
+    const order = /^    -\s+id:\s*.*$/.test(lines[index])
+      ? 0
+      : fieldMatch
+        ? getCharacterFieldOrder(fieldMatch[1] as "name" | "role" | "description")
+        : -1;
+
+    if (order >= 0 && order < targetOrder) {
+      insertAfterIndex = index;
+    }
+  }
+
+  lines.splice(insertAfterIndex + 1, 0, formattedLine);
+  return lines.join("\n");
+}
+
+function addCharacter(yamlText: string) {
+  const lines = yamlText.split(/\r?\n/);
+  const nextId = nextCharacterId(lines);
+  const block = [
+    `    - id: "${nextId}"`,
+    '      name: ""',
+    '      role: ""',
+    '      description: ""',
+  ];
+
+  const emptyIndex = lines.findIndex((line) => /^  characters:\s*\[\]\s*$/.test(line));
+
+  if (emptyIndex >= 0) {
+    lines[emptyIndex] = "  characters:";
+    lines.splice(emptyIndex + 1, 0, ...block);
+    return lines.join("\n");
+  }
+
+  const info = getCharacterRanges(lines);
+
+  if (info.charactersIndex < 0) {
+    return yamlText;
+  }
+
+  const lastRange = info.ranges[info.ranges.length - 1];
+  const insertAtIndex = lastRange ? lastRange.end : info.charactersIndex + 1;
+  lines.splice(insertAtIndex, 0, ...block);
+  return lines.join("\n");
+}
+
+function removeCharacter(yamlText: string, characterIndex: number) {
+  const lines = yamlText.split(/\r?\n/);
+  const range = getCharacterRanges(lines).ranges[characterIndex];
+
+  if (!range) {
+    return yamlText;
+  }
+
+  lines.splice(range.start, range.end - range.start);
+
+  const after = getCharacterRanges(lines);
+
+  if (after.charactersIndex >= 0 && after.ranges.length === 0) {
+    lines[after.charactersIndex] = "  characters: []";
+  }
+
+  return lines.join("\n");
+}
+
 function parseStructuredCharacters(lines: string[]) {
   const charactersIndex = lines.findIndex((line) => /^  characters:\s*(?:\[\])?\s*$/.test(line));
 
@@ -687,6 +840,18 @@ function App() {
 
   function updateBeatMetadata(sceneIndex: number, beatIndex: number, fieldName: "type" | "text" | "character", value: string) {
     updateStructuredYamlText(updateBeatStringField(yamlText, sceneIndex, beatIndex, fieldName, value));
+  }
+
+  function updateCharacterMetadata(characterIndex: number, fieldName: "name" | "role" | "description", value: string) {
+    updateStructuredYamlText(updateCharacterField(yamlText, characterIndex, fieldName, value));
+  }
+
+  function addCharacterEntry() {
+    updateStructuredYamlText(addCharacter(yamlText));
+  }
+
+  function removeCharacterEntry(characterIndex: number) {
+    updateStructuredYamlText(removeCharacter(yamlText, characterIndex));
   }
 
   function addSceneBeat(sceneIndex: number) {
@@ -1027,18 +1192,64 @@ function App() {
                     <span>{structuredPreview.script.characters.length}</span>
                   </div>
                   {structuredPreview.script.characters.length > 0 ? (
-                    <ul className="character-preview-list">
+                    <ul className="character-editor-list">
                       {structuredPreview.script.characters.map((character, index) => (
-                        <li key={`${character.id}-${character.name}-${index}`}>
-                          <strong>{displayValue(character.name, character.id || "未命名人物")}</strong>
-                          <span>{displayValue(character.role, "角色待补充")}</span>
-                          <p>{displayValue(character.description, "描述待补充")}</p>
+                        <li key={`${character.id}-${index}`} data-testid="structured-character">
+                          <div className="character-field-grid">
+                            <div className="character-field">
+                              <label htmlFor={`structured-character-name-input-${index}`}>姓名</label>
+                              <input
+                                id={`structured-character-name-input-${index}`}
+                                data-testid={`structured-character-name-input-${index}`}
+                                value={character.name}
+                                onChange={(event) => updateCharacterMetadata(index, "name", event.target.value)}
+                                placeholder={character.id || "未命名人物"}
+                              />
+                            </div>
+                            <div className="character-field">
+                              <label htmlFor={`structured-character-role-input-${index}`}>角色</label>
+                              <input
+                                id={`structured-character-role-input-${index}`}
+                                data-testid={`structured-character-role-input-${index}`}
+                                value={character.role}
+                                onChange={(event) => updateCharacterMetadata(index, "role", event.target.value)}
+                                placeholder="角色待补充"
+                              />
+                            </div>
+                          </div>
+                          <div className="character-field">
+                            <label htmlFor={`structured-character-description-input-${index}`}>描述</label>
+                            <textarea
+                              id={`structured-character-description-input-${index}`}
+                              data-testid={`structured-character-description-input-${index}`}
+                              value={character.description}
+                              onChange={(event) => updateCharacterMetadata(index, "description", event.target.value)}
+                              rows={2}
+                              placeholder="描述待补充"
+                            />
+                          </div>
+                          <button
+                            className="small-ghost-button"
+                            data-testid={`structured-character-delete-button-${index}`}
+                            type="button"
+                            onClick={() => removeCharacterEntry(index)}
+                          >
+                            删除人物
+                          </button>
                         </li>
                       ))}
                     </ul>
                   ) : (
                     <p className="structured-empty">暂无人物</p>
                   )}
+                  <button
+                    className="small-ghost-button add-character-button"
+                    data-testid="structured-add-character-button"
+                    type="button"
+                    onClick={addCharacterEntry}
+                  >
+                    新增人物
+                  </button>
                 </div>
 
                 <div className="structured-section">
