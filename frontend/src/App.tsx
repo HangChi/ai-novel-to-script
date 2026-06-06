@@ -966,93 +966,11 @@ function App() {
           </div>
         </section>
 
-        <section className="editor-panel output-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="panel-kicker">Preview</p>
-              <h2>剧本 YAML</h2>
-            </div>
-            <div className="panel-actions">
-              <span className="schema-badge">schema 0.1.0</span>
-              <button
-                className="ghost-button"
-                data-testid="toggle-yaml-edit-button"
-                type="button"
-                onClick={() => setYamlMode(yamlMode === "preview" ? "edit" : "preview")}
-              >
-                {yamlMode === "preview" ? "在线编辑" : "完成编辑"}
-              </button>
-              <button
-                className="ghost-button"
-                data-testid="validate-yaml-button"
-                type="button"
-                onClick={validateYaml}
-                disabled={isValidating}
-              >
-                {isValidating ? "校验中..." : "校验 YAML"}
-              </button>
-              <button
-                className="ghost-button"
-                data-testid="copy-yaml-button"
-                type="button"
-                onClick={copyYaml}
-                disabled={isCopying}
-              >
-                {isCopying ? "复制中..." : copyButtonLabel}
-              </button>
-              <button className="ghost-button" type="button" onClick={resetYamlText}>
-                重置
-              </button>
-              <button
-                className="ghost-button"
-                data-testid="download-yaml-button"
-                type="button"
-                onClick={downloadYaml}
-              >
-                下载 YAML
-              </button>
-            </div>
-          </div>
-          {yamlMode === "preview" ? (
-            <pre className="yaml-preview" data-testid="yaml-preview" aria-label="剧本 YAML 预览">
-              {yamlText}
-            </pre>
-          ) : (
-            <textarea
-              className="yaml-editor"
-              data-testid="yaml-editor"
-              aria-label="剧本 YAML 编辑器"
-              value={yamlText}
-              onChange={(event) => updateYamlText(event.target.value, "YAML 已手动修改，结构化视图会重新解析。")}
-              spellCheck={false}
-            />
-          )}
-          <div className={`validation-panel ${validationStatus}`} aria-live="polite">
-            <div className="validation-summary">
-              <strong>校验结果</strong>
-              <span>{validationMessage}</span>
-            </div>
-            {validationErrors.length > 0 ? (
-              <ul className="validation-errors">
-                {validationErrors.map((error, index) => (
-                  <li key={`${error.path}-${error.message}-${index}`}>
-                    <code>{error.path || "<root>"}</code>
-                    <span>{error.message}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        </section>
-
         <section className="editor-panel structure-panel structured-preview-panel" data-testid="structured-preview" aria-label="YAML 结构化预览">
-            <div className="structured-preview-heading">
+            <div className="panel-heading structured-preview-heading">
               <div>
                 <p className="panel-kicker">Structure</p>
                 <h3>结构化预览</h3>
-                <p className="structured-sync-status" data-testid="structured-sync-status">
-                  {structuredSyncMessage}
-                </p>
               </div>
               <span>
                 {structuredPreview.status === "ready"
@@ -1062,6 +980,9 @@ function App() {
             </div>
             {structuredPreview.status === "ready" ? (
               <div className="structured-preview-content">
+                <p className="structured-sync-status" data-testid="structured-sync-status">
+                  {structuredSyncMessage}
+                </p>
                 <div className="script-overview">
                   <div className="script-field">
                     <label htmlFor="structured-title-input">剧本标题</label>
@@ -1222,6 +1143,85 @@ function App() {
             ) : (
               <p className={`structured-message ${structuredPreview.status}`}>{structuredPreview.message}</p>
             )}
+        </section>
+
+        <section className="editor-panel output-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="panel-kicker">Preview</p>
+              <h2>剧本 YAML</h2>
+            </div>
+            <span className="schema-badge">schema 0.1.0</span>
+          </div>
+          <div className="panel-actions yaml-action-bar">
+            <button
+              className="ghost-button"
+              data-testid="toggle-yaml-edit-button"
+              type="button"
+              onClick={() => setYamlMode(yamlMode === "preview" ? "edit" : "preview")}
+            >
+              {yamlMode === "preview" ? "在线编辑" : "完成编辑"}
+            </button>
+            <button
+              className="ghost-button"
+              data-testid="validate-yaml-button"
+              type="button"
+              onClick={validateYaml}
+              disabled={isValidating}
+            >
+              {isValidating ? "校验中..." : "校验 YAML"}
+            </button>
+            <button
+              className="ghost-button"
+              data-testid="copy-yaml-button"
+              type="button"
+              onClick={copyYaml}
+              disabled={isCopying}
+            >
+              {isCopying ? "复制中..." : copyButtonLabel}
+            </button>
+            <button className="ghost-button" type="button" onClick={resetYamlText}>
+              重置
+            </button>
+            <button
+              className="ghost-button"
+              data-testid="download-yaml-button"
+              type="button"
+              onClick={downloadYaml}
+            >
+              下载 YAML
+            </button>
+          </div>
+          {yamlMode === "preview" ? (
+            <pre className="yaml-preview" data-testid="yaml-preview" aria-label="剧本 YAML 预览">
+              {yamlText}
+            </pre>
+          ) : (
+            <textarea
+              className="yaml-editor"
+              data-testid="yaml-editor"
+              aria-label="剧本 YAML 编辑器"
+              value={yamlText}
+              onChange={(event) => updateYamlText(event.target.value, "YAML 已手动修改，结构化视图会重新解析。")}
+              spellCheck={false}
+            />
+          )}
+          <div className={`validation-panel ${validationStatus}`} aria-live="polite">
+            <div className="validation-summary">
+              <strong>校验结果</strong>
+              <span>{validationMessage}</span>
+            </div>
+            {validationErrors.length > 0 ? (
+              <ul className="validation-errors">
+                {validationErrors.map((error, index) => (
+                  <li key={`${error.path}-${error.message}-${index}`}>
+                    <code>{error.path || "<root>"}</code>
+                    <span>{error.message}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         </section>
       </main>
     </div>
