@@ -70,7 +70,7 @@ async function ensureBackend() {
   const python = process.env.PYTHON ?? "python";
   spawnProcess(
     python,
-    ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", String(backendPort)],
+    ["main.py", "-p", String(backendPort), "--frontend-port", String(frontendPort)],
     backendDir,
     "backend",
     {
