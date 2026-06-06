@@ -193,6 +193,40 @@ def test_openai_provider_strips_fenced_yaml_and_validates(monkeypatch: pytest.Mo
     assert provider.generate_script_yaml("Rain Letter", "skeleton") == valid_yaml.strip()
 
 
+def test_openai_provider_extracts_fenced_yaml_from_surrounding_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
+    valid_yaml = _valid_yaml()
+    calls = []
+
+    def fake_request_completion(self, payload):
+        calls.append(payload)
+        return f"Here is the screenplay YAML:\n\n```yaml\n{valid_yaml}```\n\nDone."
+
+    monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
+
+    assert provider.generate_script_yaml("Rain Letter", "skeleton") == valid_yaml.strip()
+    assert len(calls) == 1
+
+
+def test_openai_provider_repairs_common_utf8_mojibake(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
+    mojibake_yaml = _valid_yaml().replace(
+        "Rain Letter",
+        "Mira\u00e2\u0080\u0099s Clock \u00e2\u0080\u0094 The Second Minute \u00e2\u20ac\u2122 Again\x85",
+    )
+
+    def fake_request_completion(self, payload):
+        return mojibake_yaml
+
+    monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
+
+    result = provider.generate_script_yaml("Rain Letter", "skeleton")
+
+    assert "Mira\u2019s Clock \u2014 The Second Minute \u2019 Again" in result
+    assert "\u00e2" not in result
+    assert "\x85" not in result
+
+
 def test_openai_provider_retries_once_to_repair_invalid_yaml(monkeypatch: pytest.MonkeyPatch) -> None:
     provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
     valid_yaml = _valid_yaml()
@@ -285,8 +319,12 @@ def test_openai_provider_prompt_requests_complete_screenplay_fields(monkeypatch:
     assert "dialogue" in system_prompt
     assert "source_chapter" in system_prompt
     assert "do not invent unrelated events" in system_prompt
+    assert "Quote every YAML string scalar" in system_prompt
+    assert "3 to 5 beats per scene" in system_prompt
     assert "Title: Rain Letter" in user_prompt
     assert "ordered beats" in user_prompt
+    assert "one complete response" in user_prompt
+    assert "Quote every string scalar" in user_prompt
 
 
 def test_openai_provider_rejects_invalid_yaml_response(monkeypatch: pytest.MonkeyPatch) -> None:
