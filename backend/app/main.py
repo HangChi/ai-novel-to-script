@@ -1,3 +1,4 @@
+import os
 from typing import Any, NoReturn
 
 from fastapi import Body, FastAPI, HTTPException
@@ -8,10 +9,17 @@ from app.chapter_parser import ChapterParseError, parse_novel_chapters
 from app.script_draft import SCHEMA_VERSION, build_script_yaml
 from app.script_validator import validate_script_yaml
 
-FRONTEND_DEV_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+def _build_frontend_dev_origins() -> list[str]:
+    ports = {"5173", os.getenv("FRONTEND_PORT", "").strip()}
+
+    return [
+        origin
+        for port in sorted(port for port in ports if port)
+        for origin in (f"http://localhost:{port}", f"http://127.0.0.1:{port}")
+    ]
+
+
+FRONTEND_DEV_ORIGINS = _build_frontend_dev_origins()
 
 app = FastAPI(
     title="AI Novel to Script API",
