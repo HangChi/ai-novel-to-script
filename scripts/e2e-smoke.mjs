@@ -224,11 +224,17 @@ async function runBrowserSmoke() {
 
     await page.getByTestId("structured-title-input").fill("Rain Letter Script");
     await page.getByTestId("structured-logline-input").fill("A letter pulls two strangers toward a dawn choice.");
+    await page.getByTestId("structured-scene-title-input-0").fill("Opening at the Teahouse");
+    await page.getByTestId("structured-scene-location-input-0").fill("Old teahouse entrance");
+    await page.getByTestId("structured-scene-time-input-0").fill("Rainy evening");
     await page.waitForFunction(
       () => {
         const previewText = document.querySelector('[data-testid="yaml-preview"]')?.textContent ?? "";
         return previewText.includes('title: "Rain Letter Script"')
-          && previewText.includes('logline: "A letter pulls two strangers toward a dawn choice."');
+          && previewText.includes('logline: "A letter pulls two strangers toward a dawn choice."')
+          && previewText.includes('title: "Opening at the Teahouse"')
+          && previewText.includes('location: "Old teahouse entrance"')
+          && previewText.includes('time: "Rainy evening"');
       },
       null,
       { timeout: 10_000 },
@@ -241,6 +247,7 @@ async function runBrowserSmoke() {
     const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
     if (!clipboardText.includes("script:")
       || !clipboardText.includes('title: "Rain Letter Script"')
+      || !clipboardText.includes('location: "Old teahouse entrance"')
       || !clipboardText.includes("type: narration")) {
       throw new Error("copied YAML did not match the generated script");
     }
@@ -262,6 +269,7 @@ async function runBrowserSmoke() {
     const downloadedYaml = await readFile(downloadedPath, "utf-8");
     if (!downloadedYaml.includes("script:")
       || !downloadedYaml.includes('logline: "A letter pulls two strangers toward a dawn choice."')
+      || !downloadedYaml.includes('time: "Rainy evening"')
       || !downloadedYaml.includes("type: narration")) {
       throw new Error("downloaded YAML did not match the generated script");
     }

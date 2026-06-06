@@ -418,12 +418,14 @@ textarea::placeholder {
   gap: 10px;
 }
 
-.script-field {
+.script-field,
+.scene-field {
   display: grid;
   gap: 4px;
 }
 
 .script-field label,
+.scene-field label,
 .structured-section-heading span,
 .scene-preview-title span {
   color: #617086;
@@ -432,7 +434,8 @@ textarea::placeholder {
 }
 
 .script-field input,
-.script-field textarea {
+.script-field textarea,
+.scene-field input {
   width: 100%;
   min-width: 0;
   border: 1px solid #d8dee7;
@@ -451,13 +454,15 @@ textarea::placeholder {
 }
 
 .script-field input:focus,
-.script-field textarea:focus {
+.script-field textarea:focus,
+.scene-field input:focus {
   border-color: #3b6ea8;
   box-shadow: 0 0 0 3px rgba(59, 110, 168, 0.12);
 }
 
 .script-field input::placeholder,
-.script-field textarea::placeholder {
+.script-field textarea::placeholder,
+.scene-field input::placeholder {
   color: #98a5b3;
 }
 
@@ -515,6 +520,12 @@ textarea::placeholder {
   color: #1f2d40;
   font-size: 0.9rem;
   overflow-wrap: anywhere;
+}
+
+.scene-field-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
 }
 
 .character-preview-list span {
@@ -683,6 +694,10 @@ textarea::placeholder {
   }
 
   .validation-errors li {
+    grid-template-columns: 1fr;
+  }
+
+  .scene-field-grid {
     grid-template-columns: 1fr;
   }
 
