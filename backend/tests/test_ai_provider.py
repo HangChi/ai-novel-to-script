@@ -131,6 +131,49 @@ def test_openai_provider_strips_fenced_yaml_and_validates(monkeypatch: pytest.Mo
     assert provider.generate_script_yaml("Rain Letter", "skeleton") == valid_yaml.strip()
 
 
+def test_openai_provider_retries_once_to_repair_invalid_yaml(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
+    valid_yaml = _valid_yaml()
+    calls = []
+
+    def fake_request_completion(self, payload):
+        calls.append(payload)
+
+        if len(calls) == 1:
+            return "script:\n  title: Rain Letter\n"
+
+        return valid_yaml
+
+    monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
+
+    assert provider.generate_script_yaml("Rain Letter", "skeleton") == valid_yaml.strip()
+    assert len(calls) == 2
+
+    repair_messages = calls[1]["messages"]
+    assert repair_messages[-2]["role"] == "assistant"
+    assert "script:\n  title: Rain Letter" in repair_messages[-2]["content"]
+    assert repair_messages[-1]["role"] == "user"
+    assert "Validation errors" in repair_messages[-1]["content"]
+    assert "script.schema_version" in repair_messages[-1]["content"]
+    assert "return YAML only" in repair_messages[-1]["content"]
+
+
+def test_openai_provider_reports_repaired_yaml_validation_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
+    calls = []
+
+    def fake_request_completion(self, payload):
+        calls.append(payload)
+        return "script:\n  title: Rain Letter\n"
+
+    monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
+
+    with pytest.raises(AIProviderError, match="script.schema_version"):
+        provider.generate_script_yaml("Rain Letter", "skeleton")
+
+    assert len(calls) == 2
+
+
 @pytest.mark.parametrize("case", _ai_quality_cases(), ids=lambda case: case["id"])
 def test_openai_provider_accepts_quality_fixture_outputs(monkeypatch: pytest.MonkeyPatch, case: dict[str, str]) -> None:
     provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")

@@ -10,6 +10,7 @@
 - 每个 fixture 都必须通过 `validate_script_yaml`。
 - 每个 fixture 都需要包含人物、logline、场景地点/时间，以及 `action`、`dialogue`、`narration`、`transition` 四类 beat。
 - 测试通过 monkeypatch `_request_completion` 返回 fixture 内容，保证 CI 稳定且无网络依赖。
+- Provider 会在首轮 AI 输出未通过 Schema 校验时自动追加一次修复提示；测试覆盖一次修复成功和二次失败后返回校验路径两种情况。
 
 ## 非目标
 
