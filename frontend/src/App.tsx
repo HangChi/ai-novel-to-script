@@ -435,6 +435,105 @@ function removeBeatFromScene(yamlText: string, sceneIndex: number, beatIndex: nu
   return lines.join("\n");
 }
 
+function getSceneCharacterInfo(lines: string[], sceneRange: { start: number; end: number }) {
+  const charactersIndex = lines.findIndex(
+    (line, index) =>
+      index > sceneRange.start &&
+      index < sceneRange.end &&
+      /^      characters:\s*(?:\[\])?\s*$/.test(line),
+  );
+
+  if (charactersIndex < 0 || /\[\]\s*$/.test(lines[charactersIndex])) {
+    return { charactersIndex, items: [] as number[] };
+  }
+
+  const items: number[] = [];
+
+  for (let index = charactersIndex + 1; index < sceneRange.end; index += 1) {
+    const line = lines[index];
+
+    if (line.trim() && (line.match(/^ */)?.[0].length ?? 0) <= 6) {
+      break;
+    }
+
+    if (/^        -\s*.*$/.test(line)) {
+      items.push(index);
+    }
+  }
+
+  return { charactersIndex, items };
+}
+
+function updateSceneCharacter(yamlText: string, sceneIndex: number, characterIndex: number, value: string) {
+  const lines = yamlText.split(/\r?\n/);
+  const sceneRange = getSceneRanges(lines)[sceneIndex];
+
+  if (!sceneRange) {
+    return yamlText;
+  }
+
+  const lineIndex = getSceneCharacterInfo(lines, sceneRange).items[characterIndex];
+
+  if (lineIndex === undefined) {
+    return yamlText;
+  }
+
+  lines[lineIndex] = `        - "${escapeYamlDoubleQuotedValue(value)}"`;
+  return lines.join("\n");
+}
+
+function addSceneCharacter(yamlText: string, sceneIndex: number) {
+  const lines = yamlText.split(/\r?\n/);
+  const sceneRange = getSceneRanges(lines)[sceneIndex];
+
+  if (!sceneRange) {
+    return yamlText;
+  }
+
+  const info = getSceneCharacterInfo(lines, sceneRange);
+
+  if (info.charactersIndex < 0) {
+    return yamlText;
+  }
+
+  const newLine = '        - ""';
+
+  if (/\[\]\s*$/.test(lines[info.charactersIndex])) {
+    lines[info.charactersIndex] = "      characters:";
+    lines.splice(info.charactersIndex + 1, 0, newLine);
+    return lines.join("\n");
+  }
+
+  const lastItem = info.items[info.items.length - 1];
+  const insertAtIndex = lastItem !== undefined ? lastItem + 1 : info.charactersIndex + 1;
+  lines.splice(insertAtIndex, 0, newLine);
+  return lines.join("\n");
+}
+
+function removeSceneCharacter(yamlText: string, sceneIndex: number, characterIndex: number) {
+  const lines = yamlText.split(/\r?\n/);
+  const sceneRange = getSceneRanges(lines)[sceneIndex];
+
+  if (!sceneRange) {
+    return yamlText;
+  }
+
+  const info = getSceneCharacterInfo(lines, sceneRange);
+  const lineIndex = info.items[characterIndex];
+
+  if (lineIndex === undefined) {
+    return yamlText;
+  }
+
+  lines.splice(lineIndex, 1);
+
+  if (info.items.length === 1) {
+    lines[info.charactersIndex] = "      characters: []";
+  }
+
+  return lines.join("\n");
+}
+
 function getIndentedSection(lines: string[], startIndex: number, parentIndent: number) {
   const section: string[] = [];
 
@@ -860,6 +959,18 @@ function App() {
 
   function removeSceneBeat(sceneIndex: number, beatIndex: number) {
     updateStructuredYamlText(removeBeatFromScene(yamlText, sceneIndex, beatIndex));
+  }
+
+  function updateSceneCharacterEntry(sceneIndex: number, characterIndex: number, value: string) {
+    updateStructuredYamlText(updateSceneCharacter(yamlText, sceneIndex, characterIndex, value));
+  }
+
+  function addSceneCharacterEntry(sceneIndex: number) {
+    updateStructuredYamlText(addSceneCharacter(yamlText, sceneIndex));
+  }
+
+  function removeSceneCharacterEntry(sceneIndex: number, characterIndex: number) {
+    updateStructuredYamlText(removeSceneCharacter(yamlText, sceneIndex, characterIndex));
   }
 
   async function checkBackend() {
@@ -1293,13 +1404,44 @@ function App() {
                               />
                             </div>
                           </div>
-                          {scene.characters.length > 0 ? (
-                            <div className="scene-character-row">
-                              {scene.characters.map((character, index) => (
-                                <span key={`${scene.id}-${character}-${index}`}>{character}</span>
-                              ))}
+                          <div className="scene-character-editor">
+                            <div className="scene-character-editor-heading">
+                              <span>登场人物</span>
+                              <button
+                                className="small-ghost-button"
+                                data-testid={`structured-scene-add-character-button-${sceneIndex}`}
+                                type="button"
+                                onClick={() => addSceneCharacterEntry(sceneIndex)}
+                              >
+                                新增登场人物
+                              </button>
                             </div>
-                          ) : null}
+                            {scene.characters.length > 0 ? (
+                              <ul className="scene-character-list">
+                                {scene.characters.map((character, index) => (
+                                  <li key={`${scene.id}-character-${index}`}>
+                                    <input
+                                      data-testid={`structured-scene-character-input-${sceneIndex}-${index}`}
+                                      value={character}
+                                      onChange={(event) => updateSceneCharacterEntry(sceneIndex, index, event.target.value)}
+                                      placeholder="登场人物"
+                                      aria-label={`场景 ${sceneIndex + 1} 登场人物 ${index + 1}`}
+                                    />
+                                    <button
+                                      className="small-ghost-button"
+                                      data-testid={`structured-scene-character-delete-button-${sceneIndex}-${index}`}
+                                      type="button"
+                                      onClick={() => removeSceneCharacterEntry(sceneIndex, index)}
+                                    >
+                                      删除
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="structured-empty">暂无登场人物</p>
+                            )}
+                          </div>
                           <div className="beat-editor-list">
                             {scene.beats.length > 0 ? (
                               <ul className="beat-preview-list">

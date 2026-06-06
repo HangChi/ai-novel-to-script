@@ -637,6 +637,55 @@ textarea::placeholder {
   margin-top: 8px;
 }
 
+.scene-character-editor {
+  display: grid;
+  gap: 6px;
+}
+
+.scene-character-editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scene-character-editor-heading span {
+  color: #617086;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.scene-character-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.scene-character-list li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.scene-character-list input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid #d8dee7;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 5px 9px;
+  font: inherit;
+  color: #1f2733;
+}
+
+.scene-character-list input:focus {
+  outline: none;
+  border-color: #3b6ea8;
+  box-shadow: 0 0 0 3px rgba(59, 110, 168, 0.12);
+}
+
 .character-preview-list span {
   color: #607086;
   font-size: 0.78rem;
