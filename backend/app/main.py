@@ -3,7 +3,7 @@ from typing import Any, NoReturn
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.ai_provider import AIProviderError, generate_script_with_ai
+from app.ai_provider import AIProviderError, generate_script_with_ai, get_ai_provider_status_from_env
 from app.chapter_parser import ChapterParseError, parse_novel_chapters
 from app.script_draft import SCHEMA_VERSION, build_script_yaml
 from app.script_validator import validate_script_yaml
@@ -32,6 +32,11 @@ app.add_middleware(
 @app.get("/api/health", tags=["system"])
 def read_health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/ai/status", tags=["ai"])
+def read_ai_status() -> dict[str, object]:
+    return get_ai_provider_status_from_env().to_dict()
 
 
 def _api_error(status_code: int, code: str, message: str) -> NoReturn:

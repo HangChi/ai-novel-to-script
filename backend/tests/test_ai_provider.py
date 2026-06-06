@@ -8,6 +8,7 @@ from app.ai_provider import (
     LocalScriptAIProvider,
     OpenAICompatibleScriptAIProvider,
     create_ai_provider_from_env,
+    get_ai_provider_status_from_env,
 )
 from app.chapter_parser import parse_novel_chapters
 from app.script_draft import build_script_yaml
@@ -48,6 +49,67 @@ def test_create_provider_defaults_to_local(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.delenv("AI_PROVIDER", raising=False)
 
     assert isinstance(create_ai_provider_from_env(), LocalScriptAIProvider)
+
+
+def test_ai_provider_status_defaults_to_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("AI_PROVIDER", raising=False)
+
+    assert get_ai_provider_status_from_env().to_dict() == {
+        "provider": "local",
+        "mode": "local",
+        "configured": True,
+        "model": "",
+        "base_url": "",
+        "missing_config": [],
+    }
+
+
+def test_ai_provider_status_reports_openai_missing_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "openai")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+
+    status = get_ai_provider_status_from_env()
+
+    assert status.provider == "openai"
+    assert status.mode == "remote"
+    assert not status.configured
+    assert status.model == ""
+    assert status.base_url == "https://api.openai.com/v1"
+    assert status.missing_config == ["OPENAI_API_KEY", "OPENAI_MODEL"]
+
+
+def test_ai_provider_status_reports_configured_deepseek_without_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "secret-key")
+    monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
+    monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
+
+    status = get_ai_provider_status_from_env().to_dict()
+
+    assert status == {
+        "provider": "deepseek",
+        "mode": "remote",
+        "configured": True,
+        "model": "deepseek-v4-flash",
+        "base_url": "https://api.deepseek.com",
+        "missing_config": [],
+    }
+    assert "secret-key" not in str(status)
+
+
+def test_ai_provider_status_reports_unsupported_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "unknown")
+
+    assert get_ai_provider_status_from_env().to_dict() == {
+        "provider": "unknown",
+        "mode": "unsupported",
+        "configured": False,
+        "model": "",
+        "base_url": "",
+        "missing_config": ["AI_PROVIDER"],
+    }
 
 
 def test_create_provider_builds_openai_provider(monkeypatch: pytest.MonkeyPatch) -> None:

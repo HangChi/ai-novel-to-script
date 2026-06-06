@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import json
 import os
 from typing import Any, Protocol
@@ -33,6 +33,19 @@ Adaptation requirements:
 
 class AIProviderError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class AIProviderStatus:
+    provider: str
+    mode: str
+    configured: bool
+    model: str
+    base_url: str
+    missing_config: list[str]
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
 
 
 class ScriptAIProvider(Protocol):
@@ -214,26 +227,104 @@ def _read_float_env(name: str, default: float) -> float:
         raise AIProviderError(f"{name} must be a number.") from error
 
 
+def _read_string_env(name: str, default: str = "") -> str:
+    raw_value = os.getenv(name)
+
+    if raw_value is None:
+        return default
+
+    return raw_value.strip()
+
+
+def get_ai_provider_status_from_env() -> AIProviderStatus:
+    provider_name = _read_string_env("AI_PROVIDER", "local").lower()
+
+    if provider_name in {"", "local"}:
+        return AIProviderStatus(
+            provider="local",
+            mode="local",
+            configured=True,
+            model="",
+            base_url="",
+            missing_config=[],
+        )
+
+    if provider_name == "openai":
+        api_key = _read_string_env("OPENAI_API_KEY")
+        model = _read_string_env("OPENAI_MODEL")
+        base_url = _read_string_env("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        missing_config = [
+            name
+            for name, value in (
+                ("OPENAI_API_KEY", api_key),
+                ("OPENAI_MODEL", model),
+                ("OPENAI_BASE_URL", base_url),
+            )
+            if not value
+        ]
+
+        return AIProviderStatus(
+            provider="openai",
+            mode="remote",
+            configured=not missing_config,
+            model=model,
+            base_url=base_url,
+            missing_config=missing_config,
+        )
+
+    if provider_name == "deepseek":
+        api_key = _read_string_env("DEEPSEEK_API_KEY")
+        model = _read_string_env("DEEPSEEK_MODEL", "deepseek-v4-flash")
+        base_url = _read_string_env("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+        missing_config = [
+            name
+            for name, value in (
+                ("DEEPSEEK_API_KEY", api_key),
+                ("DEEPSEEK_MODEL", model),
+                ("DEEPSEEK_BASE_URL", base_url),
+            )
+            if not value
+        ]
+
+        return AIProviderStatus(
+            provider="deepseek",
+            mode="remote",
+            configured=not missing_config,
+            model=model,
+            base_url=base_url,
+            missing_config=missing_config,
+        )
+
+    return AIProviderStatus(
+        provider=provider_name,
+        mode="unsupported",
+        configured=False,
+        model="",
+        base_url="",
+        missing_config=["AI_PROVIDER"],
+    )
+
+
 def create_ai_provider_from_env() -> ScriptAIProvider:
-    provider_name = os.getenv("AI_PROVIDER", "local").strip().lower()
+    provider_name = _read_string_env("AI_PROVIDER", "local").lower()
 
     if provider_name in {"", "local"}:
         return LocalScriptAIProvider()
 
     if provider_name == "openai":
         return OpenAICompatibleScriptAIProvider(
-            api_key=os.getenv("OPENAI_API_KEY", ""),
-            model=os.getenv("OPENAI_MODEL", ""),
-            base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+            api_key=_read_string_env("OPENAI_API_KEY"),
+            model=_read_string_env("OPENAI_MODEL"),
+            base_url=_read_string_env("OPENAI_BASE_URL", "https://api.openai.com/v1"),
             temperature=_read_float_env("OPENAI_TEMPERATURE", 0.3),
             timeout_seconds=_read_float_env("AI_PROVIDER_TIMEOUT_SECONDS", 60.0),
         )
 
     if provider_name == "deepseek":
         return OpenAICompatibleScriptAIProvider(
-            api_key=os.getenv("DEEPSEEK_API_KEY", ""),
-            model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
-            base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+            api_key=_read_string_env("DEEPSEEK_API_KEY"),
+            model=_read_string_env("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+            base_url=_read_string_env("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
             temperature=_read_float_env("DEEPSEEK_TEMPERATURE", 0.3),
             timeout_seconds=_read_float_env("AI_PROVIDER_TIMEOUT_SECONDS", 60.0),
             provider_name="deepseek",
