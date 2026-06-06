@@ -634,6 +634,7 @@ function App() {
   const [scriptTitle, setScriptTitle] = useState(SAMPLE_TITLE);
   const [sourceText, setSourceText] = useState(SAMPLE_TEXT);
   const [yamlText, setYamlText] = useState(INITIAL_YAML);
+  const [structuredSyncMessage, setStructuredSyncMessage] = useState("等待 YAML 内容");
 
   const characterCount = sourceText.trim().length;
   const chapterCount = countLikelyChapters(sourceText);
@@ -651,30 +652,35 @@ function App() {
     setValidationErrors([]);
   }
 
-  function updateYamlText(nextYamlText: string) {
+  function updateYamlText(nextYamlText: string, syncMessage = "YAML 已修改，结构化视图会重新解析。") {
     setYamlText(nextYamlText);
     resetValidationState("YAML 已修改，待校验");
     setCopyStatus("idle");
+    setStructuredSyncMessage(syncMessage);
+  }
+
+  function updateStructuredYamlText(nextYamlText: string) {
+    updateYamlText(nextYamlText, "结构化修改已同步到 YAML，可直接校验、复制或下载。");
   }
 
   function updateScriptMetadata(fieldName: "title" | "logline", value: string) {
-    updateYamlText(updateScriptStringField(yamlText, fieldName, value));
+    updateStructuredYamlText(updateScriptStringField(yamlText, fieldName, value));
   }
 
   function updateSceneMetadata(sceneIndex: number, fieldName: "title" | "location" | "time", value: string) {
-    updateYamlText(updateSceneStringField(yamlText, sceneIndex, fieldName, value));
+    updateStructuredYamlText(updateSceneStringField(yamlText, sceneIndex, fieldName, value));
   }
 
   function updateBeatMetadata(sceneIndex: number, beatIndex: number, fieldName: "type" | "text", value: string) {
-    updateYamlText(updateBeatStringField(yamlText, sceneIndex, beatIndex, fieldName, value));
+    updateStructuredYamlText(updateBeatStringField(yamlText, sceneIndex, beatIndex, fieldName, value));
   }
 
   function addSceneBeat(sceneIndex: number) {
-    updateYamlText(addBeatToScene(yamlText, sceneIndex));
+    updateStructuredYamlText(addBeatToScene(yamlText, sceneIndex));
   }
 
   function removeSceneBeat(sceneIndex: number, beatIndex: number) {
-    updateYamlText(removeBeatFromScene(yamlText, sceneIndex, beatIndex));
+    updateStructuredYamlText(removeBeatFromScene(yamlText, sceneIndex, beatIndex));
   }
 
   async function checkBackend() {
@@ -729,7 +735,7 @@ function App() {
 
       const result = payload as GenerateScriptResponse;
 
-      updateYamlText(result.yaml);
+      updateYamlText(result.yaml, "生成结果已同步到 YAML 和结构化视图。");
       setYamlMode("preview");
       setGenerationStatus("success");
       setGenerationMessage(`已生成 schema ${result.schema_version}`);
@@ -820,7 +826,7 @@ function App() {
   }
 
   function resetYamlText() {
-    updateYamlText(INITIAL_YAML);
+    updateYamlText(INITIAL_YAML, "已重置为初始 YAML，结构化视图会重新解析。");
     setYamlMode("preview");
     setGenerationStatus("idle");
     setGenerationMessage("待生成");
@@ -1017,7 +1023,7 @@ function App() {
               data-testid="yaml-editor"
               aria-label="剧本 YAML 编辑器"
               value={yamlText}
-              onChange={(event) => updateYamlText(event.target.value)}
+              onChange={(event) => updateYamlText(event.target.value, "YAML 已手动修改，结构化视图会重新解析。")}
               spellCheck={false}
             />
           )}
@@ -1042,6 +1048,9 @@ function App() {
               <div>
                 <p className="panel-kicker">Structure</p>
                 <h3>结构化预览</h3>
+                <p className="structured-sync-status" data-testid="structured-sync-status">
+                  {structuredSyncMessage}
+                </p>
               </div>
               <span>
                 {structuredPreview.status === "ready"

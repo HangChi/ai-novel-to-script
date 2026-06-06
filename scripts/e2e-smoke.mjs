@@ -257,6 +257,11 @@ async function runBrowserSmoke() {
       null,
       { timeout: 10_000 },
     );
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="structured-sync-status"]')?.textContent?.includes("结构化修改已同步到 YAML"),
+      null,
+      { timeout: 10_000 },
+    );
 
     await page.getByTestId("validate-yaml-button").click();
     await page.locator(".validation-panel.valid").waitFor({ timeout: 10_000 });
@@ -267,7 +272,8 @@ async function runBrowserSmoke() {
       || !clipboardText.includes('title: "Rain Letter Script"')
       || !clipboardText.includes('location: "Old teahouse entrance"')
       || !clipboardText.includes('type: "action"')
-      || !clipboardText.includes('text: "Lin steps through the rain-soaked teahouse door."')) {
+      || !clipboardText.includes('text: "Lin steps through the rain-soaked teahouse door."')
+      || clipboardText.includes("Cut to the hidden letter.")) {
       throw new Error("copied YAML did not match the generated script");
     }
 
