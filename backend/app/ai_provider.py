@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import json
 import os
+import re
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -19,6 +20,8 @@ Schema rules:
 - Preserve every scene's `source_chapter` traceability.
 - Use only beat types: action, dialogue, narration, transition.
 - Dialogue beats must include a character string.
+- Quote every YAML string scalar with double quotes, especially values that contain colons, apostrophes, or punctuation.
+- Do not use block scalars, anchors, aliases, comments, or multiple YAML documents.
 
 Adaptation requirements:
 - Fill `script.logline` with one concise sentence.
@@ -26,6 +29,7 @@ Adaptation requirements:
 - Give each character a stable id such as `char-001`, name, role, and short description.
 - Convert chapter narration into screenplay scenes with useful titles, location, and time values.
 - Split scene content into ordered beats for visible action, dialogue, necessary narration, and transitions.
+- Keep the draft compact: one scene per source chapter, 3 to 5 beats per scene, and each beat text under 180 characters.
 - Keep the plot faithful to the provided source text and do not invent unrelated events.
 - Prefer concrete, editable screenplay language over literary summary.
 """
@@ -33,6 +37,28 @@ Adaptation requirements:
 
 class AIProviderError(RuntimeError):
     pass
+
+
+YAML_FENCE_PATTERN = re.compile(r"```(?:yaml|yml)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
+MOJIBAKE_RUN_PATTERN = re.compile(r"[\u0080-\u00ff]+")
+C1_CONTROL_PATTERN = re.compile(r"[\u0080-\u009f]")
+COMMON_MOJIBAKE_REPLACEMENTS = {
+    "\u00e2\u0080\u0098": "\u2018",
+    "\u00e2\u0080\u0099": "\u2019",
+    "\u00e2\u0080\u009c": "\u201c",
+    "\u00e2\u0080\u009d": "\u201d",
+    "\u00e2\u0080\u0093": "\u2013",
+    "\u00e2\u0080\u0094": "\u2014",
+    "\u00e2\u0080\u00a6": "\u2026",
+    "\u00e2\u20ac\u02dc": "\u2018",
+    "\u00e2\u20ac\u2122": "\u2019",
+    "\u00e2\u20ac\u0153": "\u201c",
+    "\u00e2\u20ac\u009d": "\u201d",
+    "\u00e2\u20ac\u201c": "\u2013",
+    "\u00e2\u20ac\u201d": "\u2014",
+    "\u00e2\u20ac\u00a6": "\u2026",
+    "\u00c2\u00a0": " ",
+}
 
 
 @dataclass(frozen=True)
@@ -93,7 +119,7 @@ class OpenAICompatibleScriptAIProvider:
             },
         ]
         payload = self._build_completion_payload(messages)
-        raw_yaml = _strip_markdown_fence(self._request_completion(payload))
+        raw_yaml = _normalize_ai_yaml_response(self._request_completion(payload))
         validation = validate_script_yaml(raw_yaml)
 
         if validation.valid:
@@ -110,7 +136,9 @@ class OpenAICompatibleScriptAIProvider:
                 "content": _build_repair_prompt(raw_yaml=raw_yaml, validation=validation),
             },
         ]
-        repaired_yaml = _strip_markdown_fence(self._request_completion(self._build_completion_payload(repair_messages)))
+        repaired_yaml = _normalize_ai_yaml_response(
+            self._request_completion(self._build_completion_payload(repair_messages))
+        )
         repaired_validation = validate_script_yaml(repaired_yaml)
 
         if not repaired_validation.valid:
@@ -170,10 +198,51 @@ def _build_rewrite_prompt(title: str, skeleton_yaml: str) -> str:
         "- script.characters with ids, names, roles, and descriptions\n"
         "- scenes with location, time, characters, and source_chapter\n"
         "- ordered beats using action, dialogue, narration, or transition only\n\n"
+        "Keep the YAML concise enough to return as one complete response. "
+        "Quote every string scalar with double quotes.\n\n"
         "```yaml\n"
         f"{skeleton_yaml}"
         "```"
     )
+
+
+def _repair_common_utf8_mojibake(text: str) -> str:
+    for mojibake, replacement in COMMON_MOJIBAKE_REPLACEMENTS.items():
+        text = text.replace(mojibake, replacement)
+
+    def repair_run(match: re.Match[str]) -> str:
+        raw_text = match.group(0)
+
+        try:
+            return raw_text.encode("latin-1").decode("utf-8")
+        except UnicodeError:
+            return raw_text
+
+    return C1_CONTROL_PATTERN.sub("", MOJIBAKE_RUN_PATTERN.sub(repair_run, text))
+
+
+def _extract_yaml_text(content: str) -> str:
+    text = content.strip()
+
+    for match in YAML_FENCE_PATTERN.finditer(text):
+        fenced_text = match.group(1).strip()
+
+        if re.search(r"(?m)^script:\s*$", fenced_text):
+            return fenced_text
+
+    if text.startswith("```"):
+        return _strip_markdown_fence(text)
+
+    script_match = re.search(r"(?m)^script:\s*$", text)
+
+    if script_match and script_match.start() > 0:
+        return text[script_match.start() :].strip()
+
+    return text
+
+
+def _normalize_ai_yaml_response(content: str) -> str:
+    return _repair_common_utf8_mojibake(_extract_yaml_text(content))
 
 
 def _format_validation_error_paths(validation: ScriptYamlValidationResult) -> str:
@@ -189,6 +258,8 @@ def _build_repair_prompt(raw_yaml: str, validation: ScriptYamlValidationResult) 
     return (
         "The previous response did not match the required screenplay YAML schema.\n"
         "Repair the YAML and return YAML only, without Markdown fences or commentary.\n\n"
+        "Keep the repaired YAML concise, quote every string scalar with double quotes, "
+        "and avoid block scalars or unquoted values containing colons.\n\n"
         "Validation errors:\n"
         f"{errors}\n\n"
         "Previous YAML:\n"
