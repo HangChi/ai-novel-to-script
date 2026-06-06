@@ -985,22 +985,54 @@ function getAIProviderName(status: AIProviderStatusResponse | null) {
 
 function getAIProviderDetail(status: AIProviderStatusResponse | null) {
   if (!status) {
-    return "未检测";
+    return "等待检测";
   }
 
   if (status.mode === "unsupported") {
-    return "不支持的 Provider";
+    return "不支持的 Provider，请检查 AI_PROVIDER";
   }
 
   if (!status.configured) {
-    return `缺少 ${status.missing_config.join(", ")}`;
+    return `缺少配置：${status.missing_config.join(", ")}`;
   }
 
   if (status.mode === "local") {
-    return "配置正常，无需密钥";
+    return "本地模式，不会调用远程 AI";
   }
 
   return `${status.model} · 配置正常`;
+}
+
+function getBackendStatusName(status: HealthStatus) {
+  if (status === "ok") {
+    return "已连接";
+  }
+
+  if (status === "checking") {
+    return "检测中";
+  }
+
+  if (status === "error") {
+    return "未连接";
+  }
+
+  return "未检测";
+}
+
+function getBackendStatusDetail(status: HealthStatus) {
+  if (status === "ok") {
+    return "API 可用";
+  }
+
+  if (status === "checking") {
+    return "正在检查服务";
+  }
+
+  if (status === "error") {
+    return "请启动或重启后端";
+  }
+
+  return "等待检测";
 }
 
 function getAIProviderGenerationLabel(status: AIProviderStatusResponse | null) {
@@ -1009,11 +1041,36 @@ function getAIProviderGenerationLabel(status: AIProviderStatusResponse | null) {
   return providerName === "AI 状态" ? "AI Provider" : providerName;
 }
 
+function getAIProviderBlockMessage(
+  statusState: AIProviderStatusState,
+  status: AIProviderStatusResponse | null,
+  statusMessage: string,
+) {
+  if (statusState === "loading") {
+    return "正在检测 AI 配置";
+  }
+
+  if (statusState === "error") {
+    return statusMessage;
+  }
+
+  if (status?.mode === "unsupported") {
+    return "AI_PROVIDER 不受支持，请检查配置文件。";
+  }
+
+  if (status && !status.configured) {
+    return `AI 配置缺失：${status.missing_config.join(", ")}。`;
+  }
+
+  return "";
+}
+
 function App() {
   const [healthStatus, setHealthStatus] = useState<HealthStatus>("idle");
   const [healthMessage, setHealthMessage] = useState("未检测");
   const [aiProviderStatusState, setAIProviderStatusState] = useState<AIProviderStatusState>("idle");
   const [aiProviderStatus, setAIProviderStatus] = useState<AIProviderStatusResponse | null>(null);
+  const [aiProviderStatusMessage, setAIProviderStatusMessage] = useState("等待检测");
   const [generationStatus, setGenerationStatus] = useState<GenerationStatus>("idle");
   const [generationMessage, setGenerationMessage] = useState("待生成");
   const [importStatus, setImportStatus] = useState<ImportStatus>("idle");
@@ -1031,17 +1088,31 @@ function App() {
   const characterCount = sourceText.trim().length;
   const chapterCount = countLikelyChapters(sourceText);
   const isGenerating = generationStatus === "generating";
+  const providerBlockMessage = getAIProviderBlockMessage(
+    aiProviderStatusState,
+    aiProviderStatus,
+    aiProviderStatusMessage,
+  );
   const isProviderBlocked =
-    Boolean(aiProviderStatus && !aiProviderStatus.configured) || aiProviderStatus?.mode === "unsupported";
+    Boolean(providerBlockMessage) || Boolean(aiProviderStatus && !aiProviderStatus.configured)
+    || aiProviderStatus?.mode === "unsupported";
   const isValidating = validationStatus === "validating";
   const isCopying = copyStatus === "copying";
-  const inputMessage = importStatus === "idle" ? generationMessage : importMessage;
-  const inputMessageStatus = importStatus === "idle" ? generationStatus : importStatus;
+  const inputMessage = providerBlockMessage && generationStatus === "idle" && importStatus === "idle"
+    ? providerBlockMessage
+    : importStatus === "idle"
+      ? generationMessage
+      : importMessage;
+  const inputMessageStatus = providerBlockMessage && generationStatus === "idle" && importStatus === "idle"
+    ? "error"
+    : importStatus === "idle"
+      ? generationStatus
+      : importStatus;
   const copyButtonLabel = copyStatus === "copied" ? "已复制" : copyStatus === "error" ? "复制失败" : "复制 YAML";
   const structuredPreview = parseStructuredScriptPreview(yamlText);
 
   useEffect(() => {
-    void checkAIProviderStatus();
+    void checkBackend();
   }, []);
 
   function resetValidationState(message = "待校验") {
@@ -1136,26 +1207,36 @@ function App() {
     } catch {
       setHealthStatus("error");
       setHealthMessage("未连接");
+      setAIProviderStatus(null);
+      setAIProviderStatusState("error");
+      setAIProviderStatusMessage("后端未连接，无法检测 AI");
     }
   }
 
   async function checkAIProviderStatus() {
     setAIProviderStatusState("loading");
+    setAIProviderStatusMessage("正在读取 AI 配置");
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/ai/status`);
 
       if (!response.ok) {
-        throw new Error(`AI status check failed with ${response.status}`);
+        const message = response.status === 404
+          ? "AI 状态接口不可用，请重启后端"
+          : `AI 状态检测失败：HTTP ${response.status}`;
+
+        throw new Error(message);
       }
 
       const payload = (await response.json()) as AIProviderStatusResponse;
 
       setAIProviderStatus(payload);
       setAIProviderStatusState(payload.configured && payload.mode !== "unsupported" ? "ready" : "warning");
-    } catch {
+      setAIProviderStatusMessage(getAIProviderDetail(payload));
+    } catch (error) {
       setAIProviderStatus(null);
       setAIProviderStatusState("error");
+      setAIProviderStatusMessage(error instanceof Error ? error.message : "AI 状态检测失败");
     }
   }
 
@@ -1326,19 +1407,27 @@ function App() {
           <h1>小说转剧本工作台</h1>
         </div>
         <div className="topbar-actions">
-          <div className={`ai-status-card ${aiProviderStatusState}`} data-testid="ai-provider-status">
-            <span>AI</span>
-            <strong>{getAIProviderName(aiProviderStatus)}</strong>
-            <small>{aiProviderStatusState === "loading" ? "检测中" : getAIProviderDetail(aiProviderStatus)}</small>
+          <div className={`service-status-card ai-status-card ${aiProviderStatusState}`} data-testid="ai-provider-status">
+            <span className="service-status-label">AI</span>
+            <div className="service-status-copy">
+              <strong>{aiProviderStatusState === "loading" ? "检测中" : getAIProviderName(aiProviderStatus)}</strong>
+              <small>{aiProviderStatusMessage}</small>
+            </div>
           </div>
-          <span className={`status-pill ${healthStatus}`}>{healthMessage}</span>
+          <div className={`service-status-card backend-status-card ${healthStatus}`} data-testid="backend-status">
+            <span className="service-status-label">后端</span>
+            <div className="service-status-copy">
+              <strong>{getBackendStatusName(healthStatus)}</strong>
+              <small>{getBackendStatusDetail(healthStatus)}</small>
+            </div>
+          </div>
           <button
             className="status-button"
             type="button"
             onClick={checkBackend}
             disabled={healthStatus === "checking"}
           >
-            {healthStatus === "checking" ? "检测中..." : "检测后端"}
+            {healthStatus === "checking" ? "检测中..." : "刷新状态"}
           </button>
         </div>
       </header>
@@ -1715,46 +1804,49 @@ function App() {
               <p className="panel-kicker">Preview</p>
               <h2>剧本 YAML</h2>
             </div>
-            <span className="schema-badge">schema 0.1.0</span>
-          </div>
-          <div className="panel-actions yaml-action-bar">
-            <button
-              className="ghost-button"
-              data-testid="toggle-yaml-edit-button"
-              type="button"
-              onClick={() => setYamlMode(yamlMode === "preview" ? "edit" : "preview")}
-            >
-              {yamlMode === "preview" ? "在线编辑" : "完成编辑"}
-            </button>
-            <button
-              className="ghost-button"
-              data-testid="validate-yaml-button"
-              type="button"
-              onClick={validateYaml}
-              disabled={isValidating}
-            >
-              {isValidating ? "校验中..." : "校验 YAML"}
-            </button>
-            <button
-              className="ghost-button"
-              data-testid="copy-yaml-button"
-              type="button"
-              onClick={copyYaml}
-              disabled={isCopying}
-            >
-              {isCopying ? "复制中..." : copyButtonLabel}
-            </button>
-            <button className="ghost-button" type="button" onClick={resetYamlText}>
-              重置
-            </button>
-            <button
-              className="ghost-button"
-              data-testid="download-yaml-button"
-              type="button"
-              onClick={downloadYaml}
-            >
-              下载 YAML
-            </button>
+            <div className="panel-actions yaml-header-actions">
+              <button
+                className="ghost-button"
+                data-testid="toggle-yaml-edit-button"
+                aria-label={yamlMode === "preview" ? "在线编辑 YAML" : "完成编辑 YAML"}
+                type="button"
+                onClick={() => setYamlMode(yamlMode === "preview" ? "edit" : "preview")}
+              >
+                {yamlMode === "preview" ? "编辑" : "完成"}
+              </button>
+              <button
+                className="ghost-button"
+                data-testid="validate-yaml-button"
+                aria-label="校验 YAML"
+                type="button"
+                onClick={validateYaml}
+                disabled={isValidating}
+              >
+                {isValidating ? "校验中..." : "校验"}
+              </button>
+              <button
+                className="ghost-button"
+                data-testid="copy-yaml-button"
+                aria-label="复制 YAML"
+                type="button"
+                onClick={copyYaml}
+                disabled={isCopying}
+              >
+                {isCopying ? "复制中..." : copyButtonLabel.replace(" YAML", "")}
+              </button>
+              <button className="ghost-button" type="button" aria-label="重置 YAML" onClick={resetYamlText}>
+                重置
+              </button>
+              <button
+                className="ghost-button"
+                data-testid="download-yaml-button"
+                aria-label="下载 YAML"
+                type="button"
+                onClick={downloadYaml}
+              >
+                下载
+              </button>
+            </div>
           </div>
           {yamlMode === "preview" ? (
             <pre className="yaml-preview" data-testid="yaml-preview" aria-label="剧本 YAML 预览">
