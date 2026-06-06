@@ -6,8 +6,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.ai_provider import AIProviderError, generate_script_with_ai, get_ai_provider_status_from_env
 from app.chapter_parser import ChapterParseError, parse_novel_chapters
+from app.config_file import load_config_files
 from app.script_draft import SCHEMA_VERSION, build_script_yaml
 from app.script_validator import validate_script_yaml
+
+load_config_files()
+
 
 def _build_frontend_dev_origins() -> list[str]:
     ports = {"5173", os.getenv("FRONTEND_PORT", "").strip()}

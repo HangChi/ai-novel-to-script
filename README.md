@@ -90,37 +90,47 @@ http://127.0.0.1:8000/api/ai/status
 
 #### AI Provider 配置
 
-默认配置不需要密钥：
+后端启动时会自动读取项目根目录 `.env` 和 `backend/.env`。本地推荐先复制示例配置，再填写自己的密钥：
 
 ```powershell
-$env:AI_PROVIDER="local"
+Copy-Item .env.example .env
+```
+
+`.env` 已被 `.gitignore` 忽略，不要把真实 API Key 写入 `.env.example` 或其它会提交的文件。配置文件中的值只会填充缺失的环境变量；如果系统环境变量已存在，会优先使用系统环境变量。
+
+默认配置不需要密钥：
+
+```text
+AI_PROVIDER=local
 ```
 
 `local` 模式会返回稳定的 YAML 骨架，适合本地开发和测试。启用 DeepSeek Provider 时，需要配置：
 
-```powershell
-$env:AI_PROVIDER="deepseek"
-$env:DEEPSEEK_API_KEY="你的 DeepSeek API Key"
-$env:DEEPSEEK_MODEL="deepseek-v4-flash"
-$env:DEEPSEEK_BASE_URL="https://api.deepseek.com"
+```text
+AI_PROVIDER=deepseek
+DEEPSEEK_API_KEY=你的 DeepSeek API Key
+DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_BASE_URL=https://api.deepseek.com
 ```
 
 `DEEPSEEK_MODEL` 默认使用 `deepseek-v4-flash`，也可以按部署需要改为 `deepseek-v4-pro`。如需启用通用 OpenAI-compatible Provider，则配置：
 
-```powershell
-$env:AI_PROVIDER="openai"
-$env:OPENAI_API_KEY="你的 API Key"
-$env:OPENAI_MODEL="你的模型名称"
-$env:OPENAI_BASE_URL="https://api.openai.com/v1"
+```text
+AI_PROVIDER=openai
+OPENAI_API_KEY=你的 API Key
+OPENAI_MODEL=你的模型名称
+OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 
 可选配置：
 
-```powershell
-$env:OPENAI_TEMPERATURE="0.3"
-$env:DEEPSEEK_TEMPERATURE="0.3"
-$env:AI_PROVIDER_TIMEOUT_SECONDS="60"
+```text
+OPENAI_TEMPERATURE=0.3
+DEEPSEEK_TEMPERATURE=0.3
+AI_PROVIDER_TIMEOUT_SECONDS=60
 ```
+
+如需把配置文件放在其它位置，可在启动后端前设置 `AI_CONFIG_FILE` 指向该文件。
 
 ### 前端
 
