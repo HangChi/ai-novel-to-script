@@ -156,9 +156,28 @@ h3 {
 
 .panel-actions {
   display: flex;
-  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: nowrap;
   gap: 8px;
   justify-content: flex-end;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.panel-actions > * {
+  flex: 0 0 auto;
+}
+
+.yaml-action-bar {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  overflow: visible;
+  padding: 10px 18px;
+  border-bottom: 1px solid #e6eaf0;
+  background: #ffffff;
 }
 
 .ghost-button {
@@ -169,6 +188,7 @@ h3 {
   cursor: pointer;
   font-weight: 700;
   padding: 8px 11px;
+  white-space: nowrap;
 }
 
 .ghost-button:disabled {
@@ -320,6 +340,7 @@ textarea::placeholder {
   color: #27614f;
   font-weight: 800;
   padding: 5px 10px;
+  white-space: nowrap;
 }
 
 .yaml-preview {
@@ -417,17 +438,6 @@ textarea::placeholder {
   background: #ffffff;
 }
 
-.structured-preview-heading {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 18px;
-  border-bottom: 1px solid #e6eaf0;
-  background: #fbfcfd;
-}
-
 .structured-preview-heading span {
   color: #607086;
   font-size: 0.82rem;
@@ -435,10 +445,15 @@ textarea::placeholder {
 }
 
 .structured-sync-status {
-  margin: 4px 0 0;
+  margin: 0;
+  border: 1px solid #d8e5ef;
+  border-radius: 6px;
+  background: #f6fafc;
   color: #617086;
   font-size: 0.78rem;
   font-weight: 700;
+  line-height: 1.45;
+  padding: 7px 9px;
 }
 
 .structured-preview-content {
