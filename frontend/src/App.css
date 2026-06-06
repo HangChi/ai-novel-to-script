@@ -724,6 +724,22 @@ textarea::placeholder {
   padding: 3px 8px;
 }
 
+.scene-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scene-editor-toolbar strong {
+  color: #1f2d40;
+  font-size: 0.88rem;
+}
+
+.add-scene-button {
+  margin-top: 8px;
+}
+
 .beat-editor-list {
   display: grid;
   gap: 8px;
