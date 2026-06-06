@@ -59,6 +59,7 @@ project/
 | 前端 | @vitejs/plugin-react | Vite 的 React 编译插件 |
 | 前端类型 | @types/react | React 的 TypeScript 类型声明 |
 | 前端类型 | @types/react-dom | React DOM 的 TypeScript 类型声明 |
+| 前端 E2E | Playwright | 运行真实 Chromium 浏览器端到端烟测 |
 
 ## 本地开发
 
@@ -114,6 +115,22 @@ npm run dev
 
 ```text
 http://127.0.0.1:5173
+```
+
+### 浏览器端到端烟测（可选）
+
+首次运行浏览器 E2E 前，需要安装 Playwright Chromium：
+
+```powershell
+cd frontend
+npm run e2e:install
+```
+
+浏览器 E2E 用于自动验证演示主流程，不是日常启动命令：
+
+```powershell
+cd frontend
+npm run smoke:e2e
 ```
 
 ## 预期输入
@@ -186,6 +203,8 @@ script:
 ```powershell
 .\scripts\start-local-demo.ps1 -RunSmoke
 ```
+
+`-RunSmoke` 会在启动或复用前后端后运行真实浏览器 E2E，覆盖打开页面、导入示例、生成 YAML、查看结构化预览、编辑标题/logline/场景信息/beats、校验 YAML、复制和下载。首次运行前需先在 `frontend` 目录执行 `npm install` 和 `npm run e2e:install`。
 
 ### 页面演示
 
