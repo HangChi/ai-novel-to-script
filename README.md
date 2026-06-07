@@ -14,7 +14,7 @@ AI Novel to Script 是一款面向小说作者的 AI 辅助剧本创作工具，
 - 多章节输入：支持至少 3 个章节以上的小说文本。
 - 剧本结构化：自动提取章节、场次、人物、对白、动作、旁白和转场。
 - YAML 输出：生成稳定、可读、可编辑的剧本 YAML。
-- AI 状态展示：顶部展示当前 Provider、模型和配置完整性，远程配置缺失时提示缺少的环境变量。
+- AI 状态与模型选择：顶部展示当前 Provider 配置完整性，并可在生成按钮旁选择本地骨架、DeepSeek-V4-Pro、Kimi-2.6 或 GLM-4.7-FlashX。
 - 结构化预览与局部编辑：将当前 YAML 映射为结构化视图，支持编辑剧本标题、logline、人物、场景基础信息和 beats（含对白说话人）。
 - 自动同步：结构化编辑会即时写回 YAML，并提示当前内容可直接校验、复制或下载。
 - Schema 约束：通过文档定义剧本 YAML Schema，说明字段含义与设计原因。
@@ -44,7 +44,7 @@ project/
 
 ## 技术栈与第三方依赖
 
-当前框架采用前后端分离架构，MVP 阶段暂不引入数据库。AI Provider 使用可配置的运行时服务调用，当前不引入 AI SDK；后端已支持 `local`、通用 `openai` 和 `deepseek` 三种 Provider 配置。
+当前框架采用前后端分离架构，MVP 阶段暂不引入数据库。AI Provider 使用可配置的运行时服务调用，当前不引入 AI SDK；后端已支持 `local`、通用 `openai`，以及模型选择器中的 DeepSeek、Kimi、GLM OpenAI-compatible 配置。
 
 | 模块 | 技术或依赖 | 用途 |
 | --- | --- | --- |
@@ -87,6 +87,13 @@ http://127.0.0.1:8000/api/ai/status
 ```
 
 该接口只返回 provider、模式、模型、base URL 和缺失配置项，不返回任何 API Key。
+前端模型下拉使用的模型列表地址：
+
+```text
+http://127.0.0.1:8000/api/ai/models
+```
+
+该接口会返回本地骨架、DeepSeek-V4-Pro、Kimi-2.6 和 GLM-4.7-FlashX 的模型 id、默认 base URL、配置完整性和缺失配置项，同样不会返回 API Key。
 
 #### AI Provider 配置
 
@@ -102,18 +109,28 @@ Copy-Item .env.example .env
 
 ```text
 AI_PROVIDER=local
+AI_MODEL_ID=local
 ```
 
-`local` 模式会返回稳定的 YAML 骨架，适合本地开发和测试。启用 DeepSeek Provider 时，需要配置：
+`local` 模式会返回稳定的 YAML 骨架，适合本地开发和测试。前端生成按钮旁的模型下拉可以覆盖默认模型；如果 API 客户端不传 `model_id`，后端会优先使用 `AI_MODEL_ID`，再回退到 `AI_PROVIDER`。
+
+模型选择器的默认配置已写入 `.env.example`，只需要填写对应 API Key：
 
 ```text
-AI_PROVIDER=deepseek
 DEEPSEEK_API_KEY=你的 DeepSeek API Key
-DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_MODEL=deepseek-v4-pro
 DEEPSEEK_BASE_URL=https://api.deepseek.com
+
+KIMI_API_KEY=你的 Kimi API Key
+KIMI_MODEL=kimi-k2.6
+KIMI_BASE_URL=https://api.moonshot.cn/v1
+
+GLM_API_KEY=你的 GLM API Key
+GLM_MODEL=glm-4.7-flashx
+GLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 ```
 
-`DEEPSEEK_MODEL` 默认使用 `deepseek-v4-flash`，也可以按部署需要改为 `deepseek-v4-pro`。如需启用通用 OpenAI-compatible Provider，则配置：
+如需启用通用 OpenAI-compatible Provider，则配置：
 
 ```text
 AI_PROVIDER=openai
@@ -127,6 +144,8 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 ```text
 OPENAI_TEMPERATURE=0.3
 DEEPSEEK_TEMPERATURE=0.3
+KIMI_TEMPERATURE=0.3
+GLM_TEMPERATURE=0.3
 AI_PROVIDER_TIMEOUT_SECONDS=60
 ```
 
@@ -223,7 +242,7 @@ script:
 - 输入文本：`docs/examples/rain-letter-novel.txt`
 - 期望 YAML 骨架：`docs/examples/rain-letter-script.yaml`
 
-本地启动前后端后，可先查看页面顶部 AI 状态，确认当前为“本地骨架”或已配置远程 Provider；再在前端导入示例文本，点击“生成 YAML”，查看 YAML 与结构化视图，编辑剧本标题、logline、场景标题、地点、时间和 beats，确认同步状态提示后，再使用“校验 YAML”“复制 YAML”或“下载 YAML”验证完整流程。
+本地启动前后端后，可先查看页面顶部 AI 状态，确认当前为“本地骨架”或已配置远程 Provider；再在前端导入示例文本，在“生成 YAML”旁选择本地骨架、DeepSeek-V4-Pro、Kimi-2.6 或 GLM-4.7-FlashX，点击“生成 YAML”，查看 YAML 与结构化视图，编辑剧本标题、logline、场景标题、地点、时间和 beats，确认同步状态提示后，再使用“校验 YAML”“复制 YAML”或“下载 YAML”验证完整流程。
 
 ## 评委复现流程
 
@@ -246,7 +265,7 @@ script:
 .\scripts\start-local-demo.ps1 -RunSmoke
 ```
 
-`-RunSmoke` 会在启动或复用前后端后运行真实浏览器 E2E，覆盖打开页面、AI Provider 状态展示、导入示例、生成 YAML、查看结构化预览、编辑标题/logline/场景信息/beats、校验 YAML、复制和下载。首次运行前需先在 `frontend` 目录执行 `npm install` 和 `npm run e2e:install`。
+`-RunSmoke` 会在启动或复用前后端后运行真实浏览器 E2E，覆盖打开页面、AI Provider 状态展示、模型下拉默认值、导入示例、生成 YAML、查看结构化预览、编辑标题/logline/场景信息/beats、校验 YAML、复制和下载。首次运行前需先在 `frontend` 目录执行 `npm install` 和 `npm run e2e:install`。
 
 停止本地演示：
 

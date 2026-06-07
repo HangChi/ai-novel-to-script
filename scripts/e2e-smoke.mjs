@@ -160,6 +160,7 @@ async function getJson(url) {
 
 async function runApiSmoke() {
   const aiStatus = await getJson(`${backendBaseUrl}/api/ai/status`);
+  const aiModels = await getJson(`${backendBaseUrl}/api/ai/models`);
 
   if (aiStatus.provider !== "local" || aiStatus.mode !== "local" || aiStatus.configured !== true) {
     throw new Error(`unexpected AI provider status: ${JSON.stringify(aiStatus)}`);
@@ -169,11 +170,23 @@ async function runApiSmoke() {
     throw new Error("local AI provider status should not expose API key fields");
   }
 
+  const modelIds = new Set(aiModels.models?.map((model) => model.id));
+  for (const expectedModelId of ["local", "deepseek-v4-pro", "kimi-2.6", "glm-4.7-flashx"]) {
+    if (!modelIds.has(expectedModelId)) {
+      throw new Error(`AI model list did not include ${expectedModelId}: ${JSON.stringify(aiModels)}`);
+    }
+  }
+
+  if (JSON.stringify(aiModels).includes("secret") || JSON.stringify(aiModels).includes("API_KEY=")) {
+    throw new Error("AI model list should not expose API key values");
+  }
+
   const content = await readFile(sampleNovelPath, "utf-8");
   const generated = await postJson(`${backendBaseUrl}/api/scripts/generate`, {
     title: "rain-letter",
     content,
     output_format: "yaml",
+    model_id: "local",
   });
 
   if (!generated.yaml?.includes("script:")) {
@@ -243,6 +256,10 @@ async function runBrowserSmoke() {
     const schemaBadgeCount = await page.locator(".schema-badge").count();
     if (schemaBadgeCount !== 0) {
       throw new Error("schema badge should not be displayed in the YAML panel header");
+    }
+    const selectedModelId = await page.getByTestId("ai-model-select").inputValue();
+    if (selectedModelId !== "local") {
+      throw new Error(`default selected model was ${selectedModelId}`);
     }
     await page.getByTestId("source-file-input").setInputFiles(sampleNovelPath);
     await page.waitForFunction(

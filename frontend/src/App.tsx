@@ -62,6 +62,22 @@ type AIProviderStatusResponse = {
   missing_config: string[];
 };
 
+type AIModelOptionResponse = {
+  id: string;
+  label: string;
+  provider: string;
+  mode: "local" | "remote";
+  configured: boolean;
+  model: string;
+  base_url: string;
+  missing_config: string[];
+};
+
+type AIModelOptionsResponse = {
+  default_model_id: string;
+  models: AIModelOptionResponse[];
+};
+
 type ApiErrorResponse = {
   detail?: {
     code?: string;
@@ -1015,6 +1031,14 @@ function getAIProviderName(status: AIProviderStatusResponse | null) {
     return "OpenAI-compatible";
   }
 
+  if (status.provider === "kimi") {
+    return "Kimi";
+  }
+
+  if (status.provider === "glm") {
+    return "GLM";
+  }
+
   return status.provider;
 }
 
@@ -1070,15 +1094,14 @@ function getBackendStatusDetail(status: HealthStatus) {
   return "等待检测";
 }
 
-function getAIProviderGenerationLabel(status: AIProviderStatusResponse | null) {
-  const providerName = getAIProviderName(status);
-
-  return providerName === "AI 状态" ? "AI Provider" : providerName;
+function getAIModelGenerationLabel(model: AIModelOptionResponse | null) {
+  return model?.label ?? "AI Model";
 }
 
-function getAIProviderBlockMessage(
+function getAIModelBlockMessage(
   statusState: AIProviderStatusState,
-  status: AIProviderStatusResponse | null,
+  selectedModel: AIModelOptionResponse | null,
+  modelOptionsCount: number,
   statusMessage: string,
 ) {
   if (statusState === "loading") {
@@ -1089,12 +1112,12 @@ function getAIProviderBlockMessage(
     return statusMessage;
   }
 
-  if (status?.mode === "unsupported") {
-    return "AI_PROVIDER 不受支持，请检查配置文件。";
+  if (modelOptionsCount === 0 || !selectedModel) {
+    return "正在读取模型配置";
   }
 
-  if (status && !status.configured) {
-    return `AI 配置缺失：${status.missing_config.join(", ")}。`;
+  if (!selectedModel.configured) {
+    return `${selectedModel.label} 缺少配置：${selectedModel.missing_config.join(", ")}。`;
   }
 
   return "";
@@ -1106,6 +1129,8 @@ function App() {
   const [aiProviderStatusState, setAIProviderStatusState] = useState<AIProviderStatusState>("idle");
   const [aiProviderStatus, setAIProviderStatus] = useState<AIProviderStatusResponse | null>(null);
   const [aiProviderStatusMessage, setAIProviderStatusMessage] = useState("等待检测");
+  const [aiModelOptions, setAIModelOptions] = useState<AIModelOptionResponse[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState("local");
   const [generationStatus, setGenerationStatus] = useState<GenerationStatus>("idle");
   const [generationMessage, setGenerationMessage] = useState("待生成");
   const [importStatus, setImportStatus] = useState<ImportStatus>("idle");
@@ -1123,22 +1148,23 @@ function App() {
   const characterCount = sourceText.trim().length;
   const chapterCount = countLikelyChapters(sourceText);
   const isGenerating = generationStatus === "generating";
-  const providerBlockMessage = getAIProviderBlockMessage(
+  const selectedAIModel = aiModelOptions.find((option) => option.id === selectedModelId) ?? null;
+  const providerBlockMessage = getAIModelBlockMessage(
     aiProviderStatusState,
-    aiProviderStatus,
+    selectedAIModel,
+    aiModelOptions.length,
     aiProviderStatusMessage,
   );
-  const isProviderBlocked =
-    Boolean(providerBlockMessage) || Boolean(aiProviderStatus && !aiProviderStatus.configured)
-    || aiProviderStatus?.mode === "unsupported";
+  const isProviderBlocked = Boolean(providerBlockMessage);
   const isValidating = validationStatus === "validating";
   const isCopying = copyStatus === "copying";
-  const inputMessage = providerBlockMessage && generationStatus === "idle" && importStatus === "idle"
+  const shouldShowProviderBlock = Boolean(providerBlockMessage) && generationStatus !== "generating" && importStatus === "idle";
+  const inputMessage = shouldShowProviderBlock
     ? providerBlockMessage
     : importStatus === "idle"
       ? generationMessage
       : importMessage;
-  const inputMessageStatus = providerBlockMessage && generationStatus === "idle" && importStatus === "idle"
+  const inputMessageStatus = shouldShowProviderBlock
     ? "error"
     : importStatus === "idle"
       ? generationStatus
@@ -1243,6 +1269,7 @@ function App() {
       setHealthStatus("error");
       setHealthMessage("未连接");
       setAIProviderStatus(null);
+      setAIModelOptions([]);
       setAIProviderStatusState("error");
       setAIProviderStatusMessage("后端未连接，无法检测 AI");
     }
@@ -1253,31 +1280,63 @@ function App() {
     setAIProviderStatusMessage("正在读取 AI 配置");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/ai/status`);
+      const [statusResponse, modelsResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/ai/status`),
+        fetch(`${API_BASE_URL}/api/ai/models`),
+      ]);
 
-      if (!response.ok) {
-        const message = response.status === 404
+      if (!statusResponse.ok) {
+        const message = statusResponse.status === 404
           ? "AI 状态接口不可用，请重启后端"
-          : `AI 状态检测失败：HTTP ${response.status}`;
+          : `AI 状态检测失败：HTTP ${statusResponse.status}`;
 
         throw new Error(message);
       }
 
-      const payload = (await response.json()) as AIProviderStatusResponse;
+      if (!modelsResponse.ok) {
+        const message = modelsResponse.status === 404
+          ? "AI 模型接口不可用，请重启后端"
+          : `AI 模型检测失败：HTTP ${modelsResponse.status}`;
+
+        throw new Error(message);
+      }
+
+      const payload = (await statusResponse.json()) as AIProviderStatusResponse;
+      const modelOptionsPayload = (await modelsResponse.json()) as AIModelOptionsResponse;
 
       setAIProviderStatus(payload);
+      setAIModelOptions(modelOptionsPayload.models);
+      setSelectedModelId((currentModelId) => {
+        const hasCurrentModel = modelOptionsPayload.models.some((option) => option.id === currentModelId);
+        const hasDefaultModel = modelOptionsPayload.models.some(
+          (option) => option.id === modelOptionsPayload.default_model_id,
+        );
+
+        if (hasCurrentModel) {
+          return currentModelId;
+        }
+
+        if (hasDefaultModel) {
+          return modelOptionsPayload.default_model_id;
+        }
+
+        return modelOptionsPayload.models[0]?.id ?? "local";
+      });
       setAIProviderStatusState(payload.configured && payload.mode !== "unsupported" ? "ready" : "warning");
       setAIProviderStatusMessage(getAIProviderDetail(payload));
     } catch (error) {
       setAIProviderStatus(null);
+      setAIModelOptions([]);
       setAIProviderStatusState("error");
       setAIProviderStatusMessage(error instanceof Error ? error.message : "AI 状态检测失败");
     }
   }
 
   async function generateScript() {
+    const modelLabel = getAIModelGenerationLabel(selectedAIModel);
+
     setGenerationStatus("generating");
-    setGenerationMessage(`正在调用 ${getAIProviderGenerationLabel(aiProviderStatus)} 生成`);
+    setGenerationMessage(`正在调用 ${modelLabel} 生成`);
     setImportStatus("idle");
     resetValidationState("生成中，待校验");
     setCopyStatus("idle");
@@ -1292,6 +1351,7 @@ function App() {
           title: scriptTitle,
           content: sourceText,
           output_format: "yaml",
+          model_id: selectedModelId,
         }),
       });
       const payload = await readJsonSafely(response);
@@ -1305,7 +1365,7 @@ function App() {
       updateYamlText(result.yaml, "生成结果已同步到 YAML 和结构化视图。");
       setYamlMode("preview");
       setGenerationStatus("success");
-      setGenerationMessage(`${getAIProviderGenerationLabel(aiProviderStatus)} 已生成 schema ${result.schema_version}`);
+      setGenerationMessage(`${modelLabel} 已生成 schema ${result.schema_version}`);
       setValidationMessage("已生成，待校验");
     } catch (error) {
       setGenerationStatus("error");
@@ -1534,15 +1594,37 @@ function App() {
           />
           <div className="panel-footer">
             <span className={`generation-message ${inputMessageStatus}`}>{inputMessage}</span>
-            <button
-              className="generate-button"
-              data-testid="generate-yaml-button"
-              type="button"
-              onClick={generateScript}
-              disabled={isGenerating || isProviderBlocked}
-            >
-              {isGenerating ? "生成中..." : "生成 YAML"}
-            </button>
+            <div className="generation-controls">
+              <label className="model-select-field" htmlFor="ai-model-select">
+                <span>模型</span>
+                <select
+                  id="ai-model-select"
+                  data-testid="ai-model-select"
+                  value={selectedModelId}
+                  onChange={(event) => setSelectedModelId(event.target.value)}
+                  disabled={isGenerating || aiModelOptions.length === 0}
+                >
+                  {aiModelOptions.length === 0 ? (
+                    <option value={selectedModelId}>读取中</option>
+                  ) : (
+                    aiModelOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.configured ? option.label : `${option.label}（未配置）`}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+              <button
+                className="generate-button"
+                data-testid="generate-yaml-button"
+                type="button"
+                onClick={generateScript}
+                disabled={isGenerating || isProviderBlocked}
+              >
+                {isGenerating ? "生成中..." : "生成 YAML"}
+              </button>
+            </div>
           </div>
         </section>
 
