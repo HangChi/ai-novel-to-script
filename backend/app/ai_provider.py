@@ -117,7 +117,6 @@ class RemoteAIModelDefinition:
     default_temperature: float = 0.3
     fixed_temperature: float | None = None
     extra_payload: dict[str, Any] | None = None
-    legacy_base_urls: tuple[str, ...] = ()
 
 
 LOCAL_AI_MODEL_ID = "local"
@@ -141,12 +140,11 @@ REMOTE_AI_MODEL_DEFINITIONS = (
         model_env_name="KIMI_MODEL",
         default_model="kimi-k2.6",
         base_url_env_name="KIMI_BASE_URL",
-        default_base_url="https://api.moonshot.ai/v1",
+        default_base_url="https://api.moonshot.cn/v1",
         temperature_env_name="KIMI_TEMPERATURE",
         default_temperature=0.6,
         fixed_temperature=0.6,
         extra_payload={"thinking": {"type": "disabled"}},
-        legacy_base_urls=("https://api.moonshot.cn/v1",),
     ),
     RemoteAIModelDefinition(
         id="glm-4.7-flashx",
@@ -528,21 +526,8 @@ def _read_string_env(name: str, default: str = "") -> str:
     return raw_value.strip()
 
 
-def _normalize_base_url(base_url: str) -> str:
-    return base_url.strip().rstrip("/")
-
-
 def _resolve_remote_base_url(definition: RemoteAIModelDefinition) -> str:
-    base_url = _read_string_env(definition.base_url_env_name, definition.default_base_url)
-    normalized_base_url = _normalize_base_url(base_url)
-
-    if any(
-        normalized_base_url.lower() == _normalize_base_url(legacy_base_url).lower()
-        for legacy_base_url in definition.legacy_base_urls
-    ):
-        return definition.default_base_url
-
-    return base_url
+    return _read_string_env(definition.base_url_env_name, definition.default_base_url)
 
 
 def _resolve_remote_temperature(definition: RemoteAIModelDefinition) -> float:
