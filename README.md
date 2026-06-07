@@ -179,8 +179,8 @@ DEEPSEEK_TEMPERATURE=0.3
 
 KIMI_API_KEY=你的 Kimi API Key
 KIMI_MODEL=kimi-k2.6
-KIMI_BASE_URL=https://api.moonshot.cn/v1
-KIMI_TEMPERATURE=1
+KIMI_BASE_URL=https://api.moonshot.ai/v1
+# 内置 Kimi-2.6 会使用非 thinking 模式和固定 temperature=0.6
 
 GLM_API_KEY=你的 GLM API Key
 GLM_MODEL=glm-4.7-flashx
