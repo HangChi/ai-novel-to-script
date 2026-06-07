@@ -115,6 +115,9 @@ class RemoteAIModelDefinition:
     default_base_url: str
     temperature_env_name: str
     default_temperature: float = 0.3
+    fixed_temperature: float | None = None
+    extra_payload: dict[str, Any] | None = None
+    legacy_base_urls: tuple[str, ...] = ()
 
 
 LOCAL_AI_MODEL_ID = "local"
@@ -138,9 +141,12 @@ REMOTE_AI_MODEL_DEFINITIONS = (
         model_env_name="KIMI_MODEL",
         default_model="kimi-k2.6",
         base_url_env_name="KIMI_BASE_URL",
-        default_base_url="https://api.moonshot.cn/v1",
+        default_base_url="https://api.moonshot.ai/v1",
         temperature_env_name="KIMI_TEMPERATURE",
-        default_temperature=1.0,
+        default_temperature=0.6,
+        fixed_temperature=0.6,
+        extra_payload={"thinking": {"type": "disabled"}},
+        legacy_base_urls=("https://api.moonshot.cn/v1",),
     ),
     RemoteAIModelDefinition(
         id="glm-4.7-flashx",
@@ -197,6 +203,7 @@ class OpenAICompatibleScriptAIProvider:
     provider_name: str = "openai"
     api_key_env_name: str = "OPENAI_API_KEY"
     model_env_name: str = "OPENAI_MODEL"
+    extra_payload: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if not self.api_key:
@@ -263,11 +270,16 @@ class OpenAICompatibleScriptAIProvider:
         return _canonicalize_script_yaml(repaired_yaml)
 
     def _build_completion_payload(self, messages: list[dict[str, str]]) -> dict[str, Any]:
-        return {
+        payload = {
             "model": self.model,
             "temperature": self.temperature,
             "messages": messages,
         }
+
+        if self.extra_payload:
+            payload.update(self.extra_payload)
+
+        return payload
 
     def _request_completion(self, payload: dict[str, Any]) -> str:
         request = Request(
@@ -290,7 +302,9 @@ class OpenAICompatibleScriptAIProvider:
                 f"AI provider returned HTTP {error.code}.{suffix}"
             ) from error
         except (TimeoutError, URLError) as error:
-            raise AIProviderError("AI provider request failed.") from error
+            detail = _extract_request_error_detail(error)
+            suffix = f": {detail}" if detail else ""
+            raise AIProviderError(f"AI provider request failed{suffix}.") from error
         except json.JSONDecodeError as error:
             raise AIProviderError("AI provider returned invalid JSON.") from error
 
@@ -359,6 +373,15 @@ def _truncate_error_detail(detail: str, limit: int = 300) -> str:
         return collapsed
 
     return f"{collapsed[:limit].rstrip()}…"
+
+
+def _extract_request_error_detail(error: TimeoutError | URLError) -> str:
+    reason = getattr(error, "reason", None)
+
+    if reason:
+        return _truncate_error_detail(str(reason))
+
+    return _truncate_error_detail(str(error))
 
 
 def _build_rewrite_prompt(title: str, skeleton_yaml: str, output_language: str) -> str:
@@ -505,6 +528,30 @@ def _read_string_env(name: str, default: str = "") -> str:
     return raw_value.strip()
 
 
+def _normalize_base_url(base_url: str) -> str:
+    return base_url.strip().rstrip("/")
+
+
+def _resolve_remote_base_url(definition: RemoteAIModelDefinition) -> str:
+    base_url = _read_string_env(definition.base_url_env_name, definition.default_base_url)
+    normalized_base_url = _normalize_base_url(base_url)
+
+    if any(
+        normalized_base_url.lower() == _normalize_base_url(legacy_base_url).lower()
+        for legacy_base_url in definition.legacy_base_urls
+    ):
+        return definition.default_base_url
+
+    return base_url
+
+
+def _resolve_remote_temperature(definition: RemoteAIModelDefinition) -> float:
+    if definition.fixed_temperature is not None:
+        return definition.fixed_temperature
+
+    return _read_float_env(definition.temperature_env_name, definition.default_temperature)
+
+
 def _detect_output_language(title: str, skeleton_yaml: str) -> str:
     title_chinese_characters = CHINESE_CHARACTER_PATTERN.findall(title)
     title_language_characters = LETTER_CHARACTER_PATTERN.findall(title)
@@ -578,7 +625,7 @@ def _get_local_ai_model_option() -> AIModelOption:
 def _get_remote_ai_model_option(definition: RemoteAIModelDefinition) -> AIModelOption:
     api_key = _read_string_env(definition.api_key_env_name)
     model = _read_string_env(definition.model_env_name, definition.default_model)
-    base_url = _read_string_env(definition.base_url_env_name, definition.default_base_url)
+    base_url = _resolve_remote_base_url(definition)
     missing_config = [
         name
         for name, value in (
@@ -679,12 +726,13 @@ def _create_ai_provider_for_model_id(model_id: str) -> ScriptAIProvider:
     return OpenAICompatibleScriptAIProvider(
         api_key=_read_string_env(definition.api_key_env_name),
         model=_read_string_env(definition.model_env_name, definition.default_model),
-        base_url=_read_string_env(definition.base_url_env_name, definition.default_base_url),
-        temperature=_read_float_env(definition.temperature_env_name, definition.default_temperature),
+        base_url=_resolve_remote_base_url(definition),
+        temperature=_resolve_remote_temperature(definition),
         timeout_seconds=_read_float_env("AI_PROVIDER_TIMEOUT_SECONDS", 60.0),
         provider_name=definition.provider,
         api_key_env_name=definition.api_key_env_name,
         model_env_name=definition.model_env_name,
+        extra_payload=definition.extra_payload,
     )
 
 
