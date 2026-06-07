@@ -95,6 +95,7 @@ def generate_script(payload: dict[str, Any] = Body(...)) -> dict[str, str]:
     content = _read_text_field(payload, "content")
     output_format = _read_text_field(payload, "output_format", "yaml")
     model_id = _read_text_field(payload, "model_id", "").strip()
+    output_language = _read_text_field(payload, "output_language", "").strip()
 
     if output_format != "yaml":
         _bad_request("INVALID_INPUT", "output_format currently only supports yaml.")
@@ -114,6 +115,7 @@ def generate_script(payload: dict[str, Any] = Body(...)) -> dict[str, str]:
             title=title,
             skeleton_yaml=skeleton_yaml,
             model_id=model_id or None,
+            output_language=output_language or None,
         )
     except AIProviderError as error:
         _api_error(502, "AI_GENERATION_FAILED", str(error))

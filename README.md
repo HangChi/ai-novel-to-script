@@ -110,9 +110,10 @@ Copy-Item .env.example .env
 ```text
 AI_PROVIDER=local
 AI_MODEL_ID=local
+AI_OUTPUT_LANGUAGE=auto
 ```
 
-`local` 模式会返回稳定的 YAML 骨架，适合本地开发和测试。前端生成按钮旁的模型下拉可以覆盖默认模型；如果 API 客户端不传 `model_id`，后端会优先使用 `AI_MODEL_ID`，再回退到 `AI_PROVIDER`。
+`local` 模式会返回稳定的 YAML 骨架，适合本地开发和测试。前端生成按钮旁的模型下拉可以覆盖默认模型；如果 API 客户端不传 `model_id`，后端会优先使用 `AI_MODEL_ID`，再回退到 `AI_PROVIDER`。`AI_OUTPUT_LANGUAGE=auto` 会根据输入自动约束远程模型输出语言，中文小说会要求输出简体中文字段值，同时保持 YAML key 为英文 Schema key。
 
 模型选择器的默认配置已写入 `.env.example`，只需要填写对应 API Key：
 
@@ -146,6 +147,7 @@ OPENAI_TEMPERATURE=0.3
 DEEPSEEK_TEMPERATURE=0.3
 KIMI_TEMPERATURE=0.3
 GLM_TEMPERATURE=0.3
+AI_OUTPUT_LANGUAGE=auto
 AI_PROVIDER_TIMEOUT_SECONDS=60
 ```
 

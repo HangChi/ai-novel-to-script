@@ -8,6 +8,7 @@ from app.ai_provider import (
     LocalScriptAIProvider,
     OpenAICompatibleScriptAIProvider,
     create_ai_provider_from_env,
+    generate_script_with_ai,
     get_ai_model_options_from_env,
     get_default_ai_model_id_from_env,
     get_ai_provider_status_from_env,
@@ -413,6 +414,126 @@ def test_openai_provider_prompt_requests_complete_screenplay_fields(monkeypatch:
     assert "ordered beats" in user_prompt
     assert "one complete response" in user_prompt
     assert "Quote every string scalar" in user_prompt
+
+
+def test_generate_script_with_ai_detects_chinese_output_language(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = {}
+
+    class CapturingProvider:
+        def generate_script_yaml(self, title: str, skeleton_yaml: str, output_language: str = "source language") -> str:
+            captured["output_language"] = output_language
+            return skeleton_yaml
+
+    chinese_yaml = _valid_yaml().replace("Rain Letter", "雨夜来信").replace(
+        "The door opens.",
+        "林澈推门而入，雨水顺着衣角滴落。",
+    )
+
+    monkeypatch.setattr("app.ai_provider.create_ai_provider_from_env", lambda model_id=None: CapturingProvider())
+
+    generate_script_with_ai("雨夜来信", chinese_yaml)
+
+    assert captured["output_language"] == "Simplified Chinese"
+
+
+def test_generate_script_with_ai_keeps_english_as_source_language(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = {}
+
+    class CapturingProvider:
+        def generate_script_yaml(self, title: str, skeleton_yaml: str, output_language: str = "source language") -> str:
+            captured["output_language"] = output_language
+            return skeleton_yaml
+
+    monkeypatch.setattr("app.ai_provider.create_ai_provider_from_env", lambda model_id=None: CapturingProvider())
+
+    generate_script_with_ai("Rain Letter", _valid_yaml())
+
+    assert captured["output_language"] == "source language"
+
+
+def test_openai_provider_prompt_includes_chinese_output_language(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
+    captured_payload = {}
+
+    def fake_request_completion(self, payload):
+        captured_payload.update(payload)
+        return _valid_yaml()
+
+    monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
+
+    provider.generate_script_yaml("雨夜来信", _valid_yaml(), output_language="Simplified Chinese")
+
+    messages = captured_payload["messages"]
+    system_prompt = messages[0]["content"]
+    user_prompt = messages[1]["content"]
+
+    assert "Keep every YAML key exactly as the English schema key" in system_prompt
+    assert "Output language: Simplified Chinese" in user_prompt
+    assert "human-facing YAML string value" in user_prompt
+    assert "Do not translate YAML keys or beat type enum values" in user_prompt
+
+
+def test_openai_provider_prompt_keeps_english_source_language(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
+    captured_payload = {}
+
+    def fake_request_completion(self, payload):
+        captured_payload.update(payload)
+        return _valid_yaml()
+
+    monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
+
+    provider.generate_script_yaml("Rain Letter", _valid_yaml())
+
+    user_prompt = captured_payload["messages"][1]["content"]
+
+    assert "Output language: source language" in user_prompt
+    assert "Output language: Simplified Chinese" not in user_prompt
+
+
+def test_openai_provider_repair_prompt_repeats_output_language(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
+    valid_yaml = _valid_yaml()
+    calls = []
+
+    def fake_request_completion(self, payload):
+        calls.append(payload)
+
+        if len(calls) == 1:
+            return "script:\n  title: 雨夜来信\n"
+
+        return valid_yaml
+
+    monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
+
+    provider.generate_script_yaml("雨夜来信", valid_yaml, output_language="Simplified Chinese")
+
+    repair_prompt = calls[1]["messages"][-1]["content"]
+
+    assert "Output language: Simplified Chinese" in repair_prompt
+    assert "human-facing YAML string value" in repair_prompt
+
+
+def test_remote_model_paths_share_output_language_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-key")
+    monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
+    monkeypatch.setenv("GLM_API_KEY", "glm-key")
+    calls = []
+
+    def fake_request_completion(self, payload):
+        calls.append((self.provider_name, payload))
+        return _valid_yaml()
+
+    monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
+
+    for model_id in ("deepseek-v4-pro", "kimi-2.6", "glm-4.7-flashx"):
+        generate_script_with_ai("雨夜来信", _valid_yaml(), model_id=model_id, output_language="zh-CN")
+
+    assert [provider_name for provider_name, _payload in calls] == ["deepseek", "kimi", "glm"]
+    assert all(
+        "Output language: Simplified Chinese" in payload["messages"][1]["content"]
+        for _provider_name, payload in calls
+    )
 
 
 def test_openai_provider_rejects_invalid_yaml_response(monkeypatch: pytest.MonkeyPatch) -> None:
