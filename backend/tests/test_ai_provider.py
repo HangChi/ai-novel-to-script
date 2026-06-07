@@ -170,7 +170,7 @@ def test_ai_model_options_report_remote_missing_api_keys(monkeypatch: pytest.Mon
     assert options["deepseek-v4-pro"]["model"] == "deepseek-v4-pro"
     assert options["deepseek-v4-pro"]["missing_config"] == ["DEEPSEEK_API_KEY"]
     assert options["kimi-2.6"]["model"] == "kimi-k2.6"
-    assert options["kimi-2.6"]["base_url"] == "https://api.moonshot.ai/v1"
+    assert options["kimi-2.6"]["base_url"] == "https://api.moonshot.cn/v1"
     assert options["kimi-2.6"]["missing_config"] == ["KIMI_API_KEY"]
     assert options["glm-4.7-flashx"]["model"] == "glm-4.7-flashx"
     assert options["glm-4.7-flashx"]["base_url"] == "https://open.bigmodel.cn/api/paas/v4"
@@ -195,7 +195,7 @@ def test_create_provider_builds_kimi_provider_from_model_id(monkeypatch: pytest.
     assert isinstance(provider, OpenAICompatibleScriptAIProvider)
     assert provider.api_key == "test-key"
     assert provider.model == "kimi-k2.6"
-    assert provider.base_url == "https://api.moonshot.ai/v1"
+    assert provider.base_url == "https://api.moonshot.cn/v1"
     assert provider.temperature == 0.6
     assert provider.provider_name == "kimi"
     assert provider.api_key_env_name == "KIMI_API_KEY"
@@ -213,9 +213,9 @@ def test_kimi_uses_fixed_non_thinking_temperature(monkeypatch: pytest.MonkeyPatc
     assert provider.temperature == 0.6
 
 
-def test_kimi_legacy_base_url_is_upgraded(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_kimi_uses_configured_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("KIMI_API_KEY", "test-key")
-    monkeypatch.setenv("KIMI_BASE_URL", "https://api.moonshot.cn/v1")
+    monkeypatch.setenv("KIMI_BASE_URL", "https://api.moonshot.ai/v1")
 
     provider = create_ai_provider_from_env(model_id="kimi-2.6")
     options = {option.id: option.to_dict() for option in get_ai_model_options_from_env()}
