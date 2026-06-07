@@ -190,7 +190,31 @@ def test_openai_provider_strips_fenced_yaml_and_validates(monkeypatch: pytest.Mo
 
     monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
 
-    assert provider.generate_script_yaml("Rain Letter", "skeleton") == valid_yaml.strip()
+    result = provider.generate_script_yaml("Rain Letter", "skeleton")
+
+    assert result.startswith("script:\n")
+    assert yaml.safe_load(result) == yaml.safe_load(valid_yaml)
+
+
+def test_openai_provider_canonicalizes_quoted_yaml_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
+    quoted_key_yaml = _valid_yaml().replace("script:", '"script":', 1).replace(
+        "  schema_version:",
+        '  "schema_version":',
+        1,
+    )
+
+    def fake_request_completion(self, payload):
+        return f"Here is the screenplay YAML:\n```yaml\n{quoted_key_yaml}```\nDone."
+
+    monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
+
+    result = provider.generate_script_yaml("Rain Letter", "skeleton")
+
+    assert result.startswith("script:\n")
+    assert '"script":' not in result
+    assert '"schema_version":' not in result
+    assert validate_script_yaml(result).valid
 
 
 def test_openai_provider_extracts_fenced_yaml_from_surrounding_text(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -204,7 +228,7 @@ def test_openai_provider_extracts_fenced_yaml_from_surrounding_text(monkeypatch:
 
     monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
 
-    assert provider.generate_script_yaml("Rain Letter", "skeleton") == valid_yaml.strip()
+    assert yaml.safe_load(provider.generate_script_yaml("Rain Letter", "skeleton")) == yaml.safe_load(valid_yaml)
     assert len(calls) == 1
 
 
@@ -242,7 +266,7 @@ def test_openai_provider_retries_once_to_repair_invalid_yaml(monkeypatch: pytest
 
     monkeypatch.setattr(OpenAICompatibleScriptAIProvider, "_request_completion", fake_request_completion)
 
-    assert provider.generate_script_yaml("Rain Letter", "skeleton") == valid_yaml.strip()
+    assert yaml.safe_load(provider.generate_script_yaml("Rain Letter", "skeleton")) == yaml.safe_load(valid_yaml)
     assert len(calls) == 2
 
     repair_messages = calls[1]["messages"]

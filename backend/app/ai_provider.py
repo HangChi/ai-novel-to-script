@@ -8,6 +8,8 @@ from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+import yaml
+
 from app.script_validator import ScriptYamlValidationResult, validate_script_yaml
 
 SYSTEM_PROMPT = """You are an AI script adaptation assistant.
@@ -39,7 +41,13 @@ class AIProviderError(RuntimeError):
     pass
 
 
+class _AIYamlDumper(yaml.SafeDumper):
+    def increase_indent(self, flow: bool = False, indentless: bool = False):
+        return super().increase_indent(flow, False)
+
+
 YAML_FENCE_PATTERN = re.compile(r"```(?:yaml|yml)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
+ROOT_SCRIPT_PATTERN = re.compile(r"""(?m)^["']?script["']?:\s*$""")
 MOJIBAKE_RUN_PATTERN = re.compile(r"[\u0080-\u00ff]+")
 C1_CONTROL_PATTERN = re.compile(r"[\u0080-\u009f]")
 COMMON_MOJIBAKE_REPLACEMENTS = {
@@ -123,7 +131,7 @@ class OpenAICompatibleScriptAIProvider:
         validation = validate_script_yaml(raw_yaml)
 
         if validation.valid:
-            return raw_yaml
+            return _canonicalize_script_yaml(raw_yaml)
 
         repair_messages = [
             *messages,
@@ -145,7 +153,7 @@ class OpenAICompatibleScriptAIProvider:
             error_paths = _format_validation_error_paths(repaired_validation)
             raise AIProviderError(f"AI response did not match YAML schema: {error_paths}")
 
-        return repaired_yaml
+        return _canonicalize_script_yaml(repaired_yaml)
 
     def _build_completion_payload(self, messages: list[dict[str, str]]) -> dict[str, Any]:
         return {
@@ -227,13 +235,13 @@ def _extract_yaml_text(content: str) -> str:
     for match in YAML_FENCE_PATTERN.finditer(text):
         fenced_text = match.group(1).strip()
 
-        if re.search(r"(?m)^script:\s*$", fenced_text):
+        if ROOT_SCRIPT_PATTERN.search(fenced_text):
             return fenced_text
 
     if text.startswith("```"):
         return _strip_markdown_fence(text)
 
-    script_match = re.search(r"(?m)^script:\s*$", text)
+    script_match = ROOT_SCRIPT_PATTERN.search(text)
 
     if script_match and script_match.start() > 0:
         return text[script_match.start() :].strip()
@@ -243,6 +251,18 @@ def _extract_yaml_text(content: str) -> str:
 
 def _normalize_ai_yaml_response(content: str) -> str:
     return _repair_common_utf8_mojibake(_extract_yaml_text(content))
+
+
+def _canonicalize_script_yaml(yaml_text: str) -> str:
+    payload = yaml.safe_load(yaml_text)
+
+    return yaml.dump(
+        payload,
+        Dumper=_AIYamlDumper,
+        allow_unicode=True,
+        sort_keys=False,
+        width=4096,
+    )
 
 
 def _format_validation_error_paths(validation: ScriptYamlValidationResult) -> str:
