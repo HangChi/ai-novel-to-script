@@ -140,6 +140,7 @@ REMOTE_AI_MODEL_DEFINITIONS = (
         base_url_env_name="KIMI_BASE_URL",
         default_base_url="https://api.moonshot.cn/v1",
         temperature_env_name="KIMI_TEMPERATURE",
+        default_temperature=1.0,
     ),
     RemoteAIModelDefinition(
         id="glm-4.7-flashx",

@@ -196,9 +196,20 @@ def test_create_provider_builds_kimi_provider_from_model_id(monkeypatch: pytest.
     assert provider.api_key == "test-key"
     assert provider.model == "kimi-k2.6"
     assert provider.base_url == "https://api.moonshot.cn/v1"
+    assert provider.temperature == 1.0
     assert provider.provider_name == "kimi"
     assert provider.api_key_env_name == "KIMI_API_KEY"
     assert provider.model_env_name == "KIMI_MODEL"
+
+
+def test_kimi_temperature_can_be_overridden_by_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("KIMI_API_KEY", "test-key")
+    monkeypatch.setenv("KIMI_TEMPERATURE", "0.5")
+
+    provider = create_ai_provider_from_env(model_id="kimi-2.6")
+
+    assert isinstance(provider, OpenAICompatibleScriptAIProvider)
+    assert provider.temperature == 0.5
 
 
 def test_create_provider_builds_glm_provider_from_model_id(monkeypatch: pytest.MonkeyPatch) -> None:
