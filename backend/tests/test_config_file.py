@@ -40,7 +40,7 @@ def test_load_config_file_does_not_override_existing_environment(tmp_path: Path,
         "\n".join(
             [
                 "AI_PROVIDER=deepseek",
-                "DEEPSEEK_MODEL=deepseek-v4-flash",
+                "DEEPSEEK_MODEL=deepseek-v4-pro",
             ]
         ),
         encoding="utf-8",

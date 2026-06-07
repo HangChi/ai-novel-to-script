@@ -8,6 +8,8 @@ from app.ai_provider import (
     LocalScriptAIProvider,
     OpenAICompatibleScriptAIProvider,
     create_ai_provider_from_env,
+    get_ai_model_options_from_env,
+    get_default_ai_model_id_from_env,
     get_ai_provider_status_from_env,
 )
 from app.chapter_parser import parse_novel_chapters
@@ -92,7 +94,7 @@ def test_ai_provider_status_reports_configured_deepseek_without_secret(monkeypat
         "provider": "deepseek",
         "mode": "remote",
         "configured": True,
-        "model": "deepseek-v4-flash",
+        "model": "deepseek-v4-pro",
         "base_url": "https://api.deepseek.com",
         "missing_config": [],
     }
@@ -142,13 +144,75 @@ def test_create_provider_builds_deepseek_provider_with_defaults(monkeypatch: pyt
 
     assert isinstance(provider, OpenAICompatibleScriptAIProvider)
     assert provider.api_key == "test-key"
-    assert provider.model == "deepseek-v4-flash"
+    assert provider.model == "deepseek-v4-pro"
     assert provider.base_url == "https://api.deepseek.com"
     assert provider.temperature == 0.3
     assert provider.timeout_seconds == 60.0
     assert provider.provider_name == "deepseek"
     assert provider.api_key_env_name == "DEEPSEEK_API_KEY"
     assert provider.model_env_name == "DEEPSEEK_MODEL"
+
+
+def test_ai_model_options_report_remote_missing_api_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (
+        "DEEPSEEK_API_KEY",
+        "KIMI_API_KEY",
+        "GLM_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    options = {option.id: option.to_dict() for option in get_ai_model_options_from_env()}
+
+    assert options["local"]["configured"] is True
+    assert options["deepseek-v4-pro"]["model"] == "deepseek-v4-pro"
+    assert options["deepseek-v4-pro"]["missing_config"] == ["DEEPSEEK_API_KEY"]
+    assert options["kimi-2.6"]["model"] == "kimi-k2.6"
+    assert options["kimi-2.6"]["base_url"] == "https://api.moonshot.cn/v1"
+    assert options["kimi-2.6"]["missing_config"] == ["KIMI_API_KEY"]
+    assert options["glm-4.7-flashx"]["model"] == "glm-4.7-flashx"
+    assert options["glm-4.7-flashx"]["base_url"] == "https://open.bigmodel.cn/api/paas/v4"
+    assert options["glm-4.7-flashx"]["missing_config"] == ["GLM_API_KEY"]
+
+
+def test_default_ai_model_id_can_follow_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_MODEL_ID", "kimi-2.6")
+    monkeypatch.setenv("AI_PROVIDER", "deepseek")
+
+    assert get_default_ai_model_id_from_env() == "kimi-2.6"
+
+
+def test_create_provider_builds_kimi_provider_from_model_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("KIMI_API_KEY", "test-key")
+    monkeypatch.delenv("KIMI_MODEL", raising=False)
+    monkeypatch.delenv("KIMI_BASE_URL", raising=False)
+    monkeypatch.delenv("KIMI_TEMPERATURE", raising=False)
+
+    provider = create_ai_provider_from_env(model_id="kimi-2.6")
+
+    assert isinstance(provider, OpenAICompatibleScriptAIProvider)
+    assert provider.api_key == "test-key"
+    assert provider.model == "kimi-k2.6"
+    assert provider.base_url == "https://api.moonshot.cn/v1"
+    assert provider.provider_name == "kimi"
+    assert provider.api_key_env_name == "KIMI_API_KEY"
+    assert provider.model_env_name == "KIMI_MODEL"
+
+
+def test_create_provider_builds_glm_provider_from_model_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GLM_API_KEY", "test-key")
+    monkeypatch.delenv("GLM_MODEL", raising=False)
+    monkeypatch.delenv("GLM_BASE_URL", raising=False)
+    monkeypatch.delenv("GLM_TEMPERATURE", raising=False)
+
+    provider = create_ai_provider_from_env(model_id="glm-4.7-flashx")
+
+    assert isinstance(provider, OpenAICompatibleScriptAIProvider)
+    assert provider.api_key == "test-key"
+    assert provider.model == "glm-4.7-flashx"
+    assert provider.base_url == "https://open.bigmodel.cn/api/paas/v4"
+    assert provider.provider_name == "glm"
+    assert provider.api_key_env_name == "GLM_API_KEY"
+    assert provider.model_env_name == "GLM_MODEL"
 
 
 def test_create_provider_builds_deepseek_provider_with_overrides(monkeypatch: pytest.MonkeyPatch) -> None:

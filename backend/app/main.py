@@ -4,7 +4,14 @@ from typing import Any, NoReturn
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.ai_provider import AIProviderError, generate_script_with_ai, get_ai_provider_status_from_env
+from app.ai_provider import (
+    AIProviderError,
+    generate_script_with_ai,
+    get_ai_model_options_from_env,
+    get_ai_provider_status_from_env,
+    get_default_ai_model_id_from_env,
+    is_ai_model_id_supported,
+)
 from app.chapter_parser import ChapterParseError, parse_novel_chapters
 from app.config_file import load_config_files
 from app.script_draft import SCHEMA_VERSION, build_script_yaml
@@ -51,6 +58,14 @@ def read_ai_status() -> dict[str, object]:
     return get_ai_provider_status_from_env().to_dict()
 
 
+@app.get("/api/ai/models", tags=["ai"])
+def read_ai_models() -> dict[str, object]:
+    return {
+        "default_model_id": get_default_ai_model_id_from_env(),
+        "models": [option.to_dict() for option in get_ai_model_options_from_env()],
+    }
+
+
 def _api_error(status_code: int, code: str, message: str) -> NoReturn:
     raise HTTPException(
         status_code=status_code,
@@ -79,9 +94,13 @@ def generate_script(payload: dict[str, Any] = Body(...)) -> dict[str, str]:
     title = _read_text_field(payload, "title")
     content = _read_text_field(payload, "content")
     output_format = _read_text_field(payload, "output_format", "yaml")
+    model_id = _read_text_field(payload, "model_id", "").strip()
 
     if output_format != "yaml":
         _bad_request("INVALID_INPUT", "output_format currently only supports yaml.")
+
+    if model_id and not is_ai_model_id_supported(model_id):
+        _bad_request("INVALID_INPUT", "model_id is not supported.")
 
     try:
         chapters = parse_novel_chapters(content)
@@ -91,7 +110,11 @@ def generate_script(payload: dict[str, Any] = Body(...)) -> dict[str, str]:
     skeleton_yaml = build_script_yaml(title=title, chapters=chapters)
 
     try:
-        yaml_text = generate_script_with_ai(title=title, skeleton_yaml=skeleton_yaml)
+        yaml_text = generate_script_with_ai(
+            title=title,
+            skeleton_yaml=skeleton_yaml,
+            model_id=model_id or None,
+        )
     except AIProviderError as error:
         _api_error(502, "AI_GENERATION_FAILED", str(error))
 

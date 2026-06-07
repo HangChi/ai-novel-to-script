@@ -414,6 +414,50 @@ textarea::placeholder {
   color: #846118;
 }
 
+.generation-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-select-field {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.model-select-field span {
+  flex: 0 0 auto;
+  color: #5e6d80;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.model-select-field select {
+  min-width: 178px;
+  max-width: 220px;
+  border: 1px solid #d8dee7;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1a2433;
+  cursor: pointer;
+  font: 0.9rem/1.4 inherit;
+  outline: none;
+  padding: 9px 10px;
+}
+
+.model-select-field select:focus {
+  border-color: #3b6ea8;
+  box-shadow: 0 0 0 3px rgba(59, 110, 168, 0.12);
+}
+
+.model-select-field select:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .input-panel {
   border-top: 4px solid #3b6ea8;
 }
@@ -1035,6 +1079,24 @@ textarea::placeholder {
   .panel-footer {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .generation-controls {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .model-select-field {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .model-select-field select {
+    width: 100%;
+    max-width: none;
   }
 
   .generate-button {

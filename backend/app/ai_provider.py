@@ -82,6 +82,81 @@ class AIProviderStatus:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class AIModelOption:
+    id: str
+    label: str
+    provider: str
+    mode: str
+    configured: bool
+    model: str
+    base_url: str
+    missing_config: list[str]
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class RemoteAIModelDefinition:
+    id: str
+    label: str
+    provider: str
+    api_key_env_name: str
+    model_env_name: str
+    default_model: str
+    base_url_env_name: str
+    default_base_url: str
+    temperature_env_name: str
+    default_temperature: float = 0.3
+
+
+LOCAL_AI_MODEL_ID = "local"
+REMOTE_AI_MODEL_DEFINITIONS = (
+    RemoteAIModelDefinition(
+        id="deepseek-v4-pro",
+        label="DeepSeek-V4-Pro",
+        provider="deepseek",
+        api_key_env_name="DEEPSEEK_API_KEY",
+        model_env_name="DEEPSEEK_MODEL",
+        default_model="deepseek-v4-pro",
+        base_url_env_name="DEEPSEEK_BASE_URL",
+        default_base_url="https://api.deepseek.com",
+        temperature_env_name="DEEPSEEK_TEMPERATURE",
+    ),
+    RemoteAIModelDefinition(
+        id="kimi-2.6",
+        label="Kimi-2.6",
+        provider="kimi",
+        api_key_env_name="KIMI_API_KEY",
+        model_env_name="KIMI_MODEL",
+        default_model="kimi-k2.6",
+        base_url_env_name="KIMI_BASE_URL",
+        default_base_url="https://api.moonshot.cn/v1",
+        temperature_env_name="KIMI_TEMPERATURE",
+    ),
+    RemoteAIModelDefinition(
+        id="glm-4.7-flashx",
+        label="GLM-4.7-FlashX",
+        provider="glm",
+        api_key_env_name="GLM_API_KEY",
+        model_env_name="GLM_MODEL",
+        default_model="glm-4.7-flashx",
+        base_url_env_name="GLM_BASE_URL",
+        default_base_url="https://open.bigmodel.cn/api/paas/v4",
+        temperature_env_name="GLM_TEMPERATURE",
+    ),
+)
+REMOTE_AI_MODEL_DEFINITIONS_BY_ID = {
+    definition.id: definition for definition in REMOTE_AI_MODEL_DEFINITIONS
+}
+PROVIDER_DEFAULT_MODEL_IDS = {
+    "deepseek": "deepseek-v4-pro",
+    "kimi": "kimi-2.6",
+    "glm": "glm-4.7-flashx",
+}
+
+
 class ScriptAIProvider(Protocol):
     def generate_script_yaml(self, title: str, skeleton_yaml: str) -> str:
         ...
@@ -327,7 +402,151 @@ def _read_string_env(name: str, default: str = "") -> str:
     return raw_value.strip()
 
 
+def _normalize_model_id(model_id: str | None) -> str:
+    return (model_id or "").strip().lower()
+
+
+def _get_remote_definition_for_provider(provider_name: str) -> RemoteAIModelDefinition | None:
+    model_id = PROVIDER_DEFAULT_MODEL_IDS.get(provider_name)
+
+    if not model_id:
+        return None
+
+    return REMOTE_AI_MODEL_DEFINITIONS_BY_ID[model_id]
+
+
+def _get_local_ai_model_option() -> AIModelOption:
+    return AIModelOption(
+        id=LOCAL_AI_MODEL_ID,
+        label="本地骨架",
+        provider="local",
+        mode="local",
+        configured=True,
+        model="",
+        base_url="",
+        missing_config=[],
+    )
+
+
+def _get_remote_ai_model_option(definition: RemoteAIModelDefinition) -> AIModelOption:
+    api_key = _read_string_env(definition.api_key_env_name)
+    model = _read_string_env(definition.model_env_name, definition.default_model)
+    base_url = _read_string_env(definition.base_url_env_name, definition.default_base_url)
+    missing_config = [
+        name
+        for name, value in (
+            (definition.api_key_env_name, api_key),
+            (definition.model_env_name, model),
+            (definition.base_url_env_name, base_url),
+        )
+        if not value
+    ]
+
+    return AIModelOption(
+        id=definition.id,
+        label=definition.label,
+        provider=definition.provider,
+        mode="remote",
+        configured=not missing_config,
+        model=model,
+        base_url=base_url,
+        missing_config=missing_config,
+    )
+
+
+def get_ai_model_options_from_env() -> list[AIModelOption]:
+    return [
+        _get_local_ai_model_option(),
+        *(
+            _get_remote_ai_model_option(definition)
+            for definition in REMOTE_AI_MODEL_DEFINITIONS
+        ),
+    ]
+
+
+def get_default_ai_model_id_from_env() -> str:
+    configured_model_id = _normalize_model_id(_read_string_env("AI_MODEL_ID"))
+
+    if configured_model_id:
+        return configured_model_id
+
+    provider_name = _read_string_env("AI_PROVIDER", "local").lower()
+
+    return PROVIDER_DEFAULT_MODEL_IDS.get(provider_name, LOCAL_AI_MODEL_ID)
+
+
+def is_ai_model_id_supported(model_id: str) -> bool:
+    normalized_model_id = _normalize_model_id(model_id)
+
+    return normalized_model_id == LOCAL_AI_MODEL_ID or normalized_model_id in REMOTE_AI_MODEL_DEFINITIONS_BY_ID
+
+
+def _get_ai_provider_status_from_model_id(model_id: str) -> AIProviderStatus:
+    normalized_model_id = _normalize_model_id(model_id)
+
+    if normalized_model_id == LOCAL_AI_MODEL_ID:
+        return AIProviderStatus(
+            provider="local",
+            mode="local",
+            configured=True,
+            model="",
+            base_url="",
+            missing_config=[],
+        )
+
+    definition = REMOTE_AI_MODEL_DEFINITIONS_BY_ID.get(normalized_model_id)
+
+    if definition:
+        option = _get_remote_ai_model_option(definition)
+
+        return AIProviderStatus(
+            provider=option.provider,
+            mode=option.mode,
+            configured=option.configured,
+            model=option.model,
+            base_url=option.base_url,
+            missing_config=option.missing_config,
+        )
+
+    return AIProviderStatus(
+        provider=normalized_model_id,
+        mode="unsupported",
+        configured=False,
+        model="",
+        base_url="",
+        missing_config=["AI_MODEL_ID"],
+    )
+
+
+def _create_ai_provider_for_model_id(model_id: str) -> ScriptAIProvider:
+    normalized_model_id = _normalize_model_id(model_id)
+
+    if normalized_model_id == LOCAL_AI_MODEL_ID:
+        return LocalScriptAIProvider()
+
+    definition = REMOTE_AI_MODEL_DEFINITIONS_BY_ID.get(normalized_model_id)
+
+    if not definition:
+        raise AIProviderError(f"Unsupported AI_MODEL_ID: {model_id}.")
+
+    return OpenAICompatibleScriptAIProvider(
+        api_key=_read_string_env(definition.api_key_env_name),
+        model=_read_string_env(definition.model_env_name, definition.default_model),
+        base_url=_read_string_env(definition.base_url_env_name, definition.default_base_url),
+        temperature=_read_float_env(definition.temperature_env_name, definition.default_temperature),
+        timeout_seconds=_read_float_env("AI_PROVIDER_TIMEOUT_SECONDS", 60.0),
+        provider_name=definition.provider,
+        api_key_env_name=definition.api_key_env_name,
+        model_env_name=definition.model_env_name,
+    )
+
+
 def get_ai_provider_status_from_env() -> AIProviderStatus:
+    configured_model_id = _normalize_model_id(_read_string_env("AI_MODEL_ID"))
+
+    if configured_model_id:
+        return _get_ai_provider_status_from_model_id(configured_model_id)
+
     provider_name = _read_string_env("AI_PROVIDER", "local").lower()
 
     if provider_name in {"", "local"}:
@@ -339,6 +558,11 @@ def get_ai_provider_status_from_env() -> AIProviderStatus:
             base_url="",
             missing_config=[],
         )
+
+    remote_definition = _get_remote_definition_for_provider(provider_name)
+
+    if remote_definition:
+        return _get_ai_provider_status_from_model_id(remote_definition.id)
 
     if provider_name == "openai":
         api_key = _read_string_env("OPENAI_API_KEY")
@@ -363,29 +587,6 @@ def get_ai_provider_status_from_env() -> AIProviderStatus:
             missing_config=missing_config,
         )
 
-    if provider_name == "deepseek":
-        api_key = _read_string_env("DEEPSEEK_API_KEY")
-        model = _read_string_env("DEEPSEEK_MODEL", "deepseek-v4-flash")
-        base_url = _read_string_env("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-        missing_config = [
-            name
-            for name, value in (
-                ("DEEPSEEK_API_KEY", api_key),
-                ("DEEPSEEK_MODEL", model),
-                ("DEEPSEEK_BASE_URL", base_url),
-            )
-            if not value
-        ]
-
-        return AIProviderStatus(
-            provider="deepseek",
-            mode="remote",
-            configured=not missing_config,
-            model=model,
-            base_url=base_url,
-            missing_config=missing_config,
-        )
-
     return AIProviderStatus(
         provider=provider_name,
         mode="unsupported",
@@ -396,11 +597,21 @@ def get_ai_provider_status_from_env() -> AIProviderStatus:
     )
 
 
-def create_ai_provider_from_env() -> ScriptAIProvider:
+def create_ai_provider_from_env(model_id: str | None = None) -> ScriptAIProvider:
+    requested_model_id = _normalize_model_id(model_id) or _normalize_model_id(_read_string_env("AI_MODEL_ID"))
+
+    if requested_model_id:
+        return _create_ai_provider_for_model_id(requested_model_id)
+
     provider_name = _read_string_env("AI_PROVIDER", "local").lower()
 
     if provider_name in {"", "local"}:
         return LocalScriptAIProvider()
+
+    remote_definition = _get_remote_definition_for_provider(provider_name)
+
+    if remote_definition:
+        return _create_ai_provider_for_model_id(remote_definition.id)
 
     if provider_name == "openai":
         return OpenAICompatibleScriptAIProvider(
@@ -411,20 +622,11 @@ def create_ai_provider_from_env() -> ScriptAIProvider:
             timeout_seconds=_read_float_env("AI_PROVIDER_TIMEOUT_SECONDS", 60.0),
         )
 
-    if provider_name == "deepseek":
-        return OpenAICompatibleScriptAIProvider(
-            api_key=_read_string_env("DEEPSEEK_API_KEY"),
-            model=_read_string_env("DEEPSEEK_MODEL", "deepseek-v4-flash"),
-            base_url=_read_string_env("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-            temperature=_read_float_env("DEEPSEEK_TEMPERATURE", 0.3),
-            timeout_seconds=_read_float_env("AI_PROVIDER_TIMEOUT_SECONDS", 60.0),
-            provider_name="deepseek",
-            api_key_env_name="DEEPSEEK_API_KEY",
-            model_env_name="DEEPSEEK_MODEL",
-        )
-
     raise AIProviderError(f"Unsupported AI_PROVIDER: {provider_name}.")
 
 
-def generate_script_with_ai(title: str, skeleton_yaml: str) -> str:
-    return create_ai_provider_from_env().generate_script_yaml(title=title, skeleton_yaml=skeleton_yaml)
+def generate_script_with_ai(title: str, skeleton_yaml: str, model_id: str | None = None) -> str:
+    return create_ai_provider_from_env(model_id=model_id).generate_script_yaml(
+        title=title,
+        skeleton_yaml=skeleton_yaml,
+    )
