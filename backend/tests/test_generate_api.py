@@ -95,12 +95,18 @@ def test_generate_script_rejects_unsupported_output_format() -> None:
     }
 
 
-def test_generate_script_passes_model_id_to_ai_provider(monkeypatch) -> None:
+def test_generate_script_passes_model_id_and_output_language_to_ai_provider(monkeypatch) -> None:
     captured = {}
 
-    def generate_with_model_id(title: str, skeleton_yaml: str, model_id: str | None = None) -> str:
+    def generate_with_model_id(
+        title: str,
+        skeleton_yaml: str,
+        model_id: str | None = None,
+        output_language: str | None = None,
+    ) -> str:
         captured["title"] = title
         captured["model_id"] = model_id
+        captured["output_language"] = output_language
         return skeleton_yaml
 
     monkeypatch.setattr("app.main.generate_script_with_ai", generate_with_model_id)
@@ -112,6 +118,7 @@ def test_generate_script_passes_model_id_to_ai_provider(monkeypatch) -> None:
             "content": _novel_text(),
             "output_format": "yaml",
             "model_id": "kimi-2.6",
+            "output_language": "zh-CN",
         },
     )
 
@@ -119,6 +126,7 @@ def test_generate_script_passes_model_id_to_ai_provider(monkeypatch) -> None:
     assert captured == {
         "title": "Rain Letter",
         "model_id": "kimi-2.6",
+        "output_language": "zh-CN",
     }
 
 
@@ -141,7 +149,12 @@ def test_generate_script_rejects_unsupported_model_id() -> None:
 
 
 def test_generate_script_reports_ai_provider_failure(monkeypatch) -> None:
-    def fail_generation(title: str, skeleton_yaml: str, model_id: str | None = None) -> str:
+    def fail_generation(
+        title: str,
+        skeleton_yaml: str,
+        model_id: str | None = None,
+        output_language: str | None = None,
+    ) -> str:
         raise AIProviderError("provider unavailable")
 
     monkeypatch.setattr("app.main.generate_script_with_ai", fail_generation)

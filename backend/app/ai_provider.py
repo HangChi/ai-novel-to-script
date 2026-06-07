@@ -20,6 +20,7 @@ Schema rules:
 - Keep the top-level `script` object and schema_version `0.1.0`.
 - Preserve `source.type`, `source.chapters_count`, and `source.chapter_titles`.
 - Preserve every scene's `source_chapter` traceability.
+- Keep every YAML key exactly as the English schema key.
 - Use only beat types: action, dialogue, narration, transition.
 - Dialogue beats must include a character string.
 - Quote every YAML string scalar with double quotes, especially values that contain colons, apostrophes, or punctuation.
@@ -34,6 +35,11 @@ Adaptation requirements:
 - Keep the draft compact: one scene per source chapter, 3 to 5 beats per scene, and each beat text under 180 characters.
 - Keep the plot faithful to the provided source text and do not invent unrelated events.
 - Prefer concrete, editable screenplay language over literary summary.
+
+Language requirements:
+- The user prompt specifies the output language for human-facing YAML string values.
+- Write script.title, script.logline, source.chapter_titles, character names/roles/descriptions, scene titles/locations/times/character lists, dialogue character names, and beat text in that output language.
+- Keep YAML keys and enum values such as action, dialogue, narration, and transition in English.
 """
 
 
@@ -155,16 +161,28 @@ PROVIDER_DEFAULT_MODEL_IDS = {
     "kimi": "kimi-2.6",
     "glm": "glm-4.7-flashx",
 }
+CHINESE_CHARACTER_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+LETTER_CHARACTER_PATTERN = re.compile(r"[A-Za-z\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 
 
 class ScriptAIProvider(Protocol):
-    def generate_script_yaml(self, title: str, skeleton_yaml: str) -> str:
+    def generate_script_yaml(
+        self,
+        title: str,
+        skeleton_yaml: str,
+        output_language: str = "source language",
+    ) -> str:
         ...
 
 
 @dataclass(frozen=True)
 class LocalScriptAIProvider:
-    def generate_script_yaml(self, title: str, skeleton_yaml: str) -> str:
+    def generate_script_yaml(
+        self,
+        title: str,
+        skeleton_yaml: str,
+        output_language: str = "source language",
+    ) -> str:
         return skeleton_yaml
 
 
@@ -190,7 +208,12 @@ class OpenAICompatibleScriptAIProvider:
                 f"{self.model_env_name} is required when AI_PROVIDER={self.provider_name}."
             )
 
-    def generate_script_yaml(self, title: str, skeleton_yaml: str) -> str:
+    def generate_script_yaml(
+        self,
+        title: str,
+        skeleton_yaml: str,
+        output_language: str = "source language",
+    ) -> str:
         messages = [
             {
                 "role": "system",
@@ -198,7 +221,11 @@ class OpenAICompatibleScriptAIProvider:
             },
             {
                 "role": "user",
-                "content": _build_rewrite_prompt(title=title, skeleton_yaml=skeleton_yaml),
+                "content": _build_rewrite_prompt(
+                    title=title,
+                    skeleton_yaml=skeleton_yaml,
+                    output_language=output_language,
+                ),
             },
         ]
         payload = self._build_completion_payload(messages)
@@ -216,7 +243,11 @@ class OpenAICompatibleScriptAIProvider:
             },
             {
                 "role": "user",
-                "content": _build_repair_prompt(raw_yaml=raw_yaml, validation=validation),
+                "content": _build_repair_prompt(
+                    raw_yaml=raw_yaml,
+                    validation=validation,
+                    output_language=output_language,
+                ),
             },
         ]
         repaired_yaml = _normalize_ai_yaml_response(
@@ -269,11 +300,14 @@ class OpenAICompatibleScriptAIProvider:
         return content
 
 
-def _build_rewrite_prompt(title: str, skeleton_yaml: str) -> str:
+def _build_rewrite_prompt(title: str, skeleton_yaml: str, output_language: str) -> str:
     script_title = title.strip() or "Untitled Script"
 
     return (
         f"Title: {script_title}\n\n"
+        f"Output language: {output_language}\n"
+        "Write every human-facing YAML string value in the output language above. "
+        "Keep YAML keys and enum values in English exactly as required by the schema.\n\n"
         "Rewrite this screenplay YAML skeleton into an editable first draft.\n"
         "Use the skeleton as the source of truth for structure and traceability.\n\n"
         "Before returning, check that the YAML includes:\n"
@@ -282,7 +316,8 @@ def _build_rewrite_prompt(title: str, skeleton_yaml: str) -> str:
         "- scenes with location, time, characters, and source_chapter\n"
         "- ordered beats using action, dialogue, narration, or transition only\n\n"
         "Keep the YAML concise enough to return as one complete response. "
-        "Quote every string scalar with double quotes.\n\n"
+        "Quote every string scalar with double quotes. "
+        "Do not translate YAML keys or beat type enum values.\n\n"
         "```yaml\n"
         f"{skeleton_yaml}"
         "```"
@@ -344,7 +379,11 @@ def _format_validation_error_paths(validation: ScriptYamlValidationResult) -> st
     return ", ".join(error.path or "<root>" for error in validation.errors[:5])
 
 
-def _build_repair_prompt(raw_yaml: str, validation: ScriptYamlValidationResult) -> str:
+def _build_repair_prompt(
+    raw_yaml: str,
+    validation: ScriptYamlValidationResult,
+    output_language: str,
+) -> str:
     errors = "\n".join(
         f"- {error.path or '<root>'}: {error.message}"
         for error in validation.errors[:10]
@@ -353,6 +392,9 @@ def _build_repair_prompt(raw_yaml: str, validation: ScriptYamlValidationResult) 
     return (
         "The previous response did not match the required screenplay YAML schema.\n"
         "Repair the YAML and return YAML only, without Markdown fences or commentary.\n\n"
+        f"Output language: {output_language}\n"
+        "Write every human-facing YAML string value in the output language above. "
+        "Keep YAML keys and enum values in English exactly as required by the schema.\n\n"
         "Keep the repaired YAML concise, quote every string scalar with double quotes, "
         "and avoid block scalars or unquoted values containing colons.\n\n"
         "Validation errors:\n"
@@ -400,6 +442,50 @@ def _read_string_env(name: str, default: str = "") -> str:
         return default
 
     return raw_value.strip()
+
+
+def _detect_output_language(title: str, skeleton_yaml: str) -> str:
+    title_chinese_characters = CHINESE_CHARACTER_PATTERN.findall(title)
+    title_language_characters = LETTER_CHARACTER_PATTERN.findall(title)
+
+    if title_language_characters and len(title_chinese_characters) >= 2:
+        title_chinese_ratio = len(title_chinese_characters) / len(title_language_characters)
+
+        if title_chinese_ratio >= 0.5:
+            return "Simplified Chinese"
+
+    language_sample = f"{title}\n{skeleton_yaml}"
+    chinese_characters = CHINESE_CHARACTER_PATTERN.findall(language_sample)
+    language_characters = LETTER_CHARACTER_PATTERN.findall(language_sample)
+
+    if not language_characters:
+        return "source language"
+
+    chinese_ratio = len(chinese_characters) / len(language_characters)
+
+    if len(chinese_characters) >= 4 and chinese_ratio >= 0.1:
+        return "Simplified Chinese"
+
+    return "source language"
+
+
+def _resolve_output_language(title: str, skeleton_yaml: str, output_language: str | None = None) -> str:
+    configured_language = (output_language or _read_string_env("AI_OUTPUT_LANGUAGE", "auto")).strip()
+    normalized_language = configured_language.lower()
+
+    if normalized_language in {"", "auto"}:
+        return _detect_output_language(title=title, skeleton_yaml=skeleton_yaml)
+
+    if normalized_language in {"zh", "zh-cn", "cn", "chinese", "simplified chinese"}:
+        return "Simplified Chinese"
+
+    if normalized_language in {"en", "en-us", "english"}:
+        return "English"
+
+    if normalized_language in {"source", "source language"}:
+        return "source language"
+
+    return configured_language
 
 
 def _normalize_model_id(model_id: str | None) -> str:
@@ -625,8 +711,20 @@ def create_ai_provider_from_env(model_id: str | None = None) -> ScriptAIProvider
     raise AIProviderError(f"Unsupported AI_PROVIDER: {provider_name}.")
 
 
-def generate_script_with_ai(title: str, skeleton_yaml: str, model_id: str | None = None) -> str:
+def generate_script_with_ai(
+    title: str,
+    skeleton_yaml: str,
+    model_id: str | None = None,
+    output_language: str | None = None,
+) -> str:
+    resolved_output_language = _resolve_output_language(
+        title=title,
+        skeleton_yaml=skeleton_yaml,
+        output_language=output_language,
+    )
+
     return create_ai_provider_from_env(model_id=model_id).generate_script_yaml(
         title=title,
         skeleton_yaml=skeleton_yaml,
+        output_language=resolved_output_language,
     )
