@@ -1,4 +1,4 @@
-import { type ChangeEvent, useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 
 import "./App.css";
 
@@ -36,16 +36,37 @@ const SCRIPT_YAML_KEYS = new Set([
   "character",
 ]);
 
-type GenerateScriptResponse = {
-  status: "completed";
-  schema_version: string;
-  yaml: string;
-};
-
 type ScriptValidationError = {
   code: string;
   path: string;
   message: string;
+};
+
+type GenerationJobStatus = "queued" | "running" | "completed" | "failed";
+
+type GenerateScriptJobResponse = {
+  job_id: string;
+  status: "queued";
+  status_url: string;
+  events_url: string;
+};
+
+type GenerationJobError = {
+  code: string;
+  message: string;
+};
+
+type GenerationJobSnapshot = {
+  job_id: string;
+  status: GenerationJobStatus;
+  phase: string;
+  progress: number;
+  message: string;
+  created_at: string;
+  updated_at: string;
+  schema_version?: string;
+  yaml?: string;
+  error?: GenerationJobError;
 };
 
 type ValidateScriptResponse = {
@@ -128,6 +149,15 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000
 const SAMPLE_TITLE = "雨夜来信";
 const SAMPLE_TEXT = "第 1 章 初遇\n林澈推门而入，雨水顺着衣角滴落。\n\n第 2 章 暗线\n苏晚在旧信封里发现陌生地址。\n\n第 3 章 选择\n两人在清晨的站台前做出决定。";
 const INITIAL_YAML = 'script:\n  schema_version: "0.1.0"\n  title: ""\n  scenes: []\n';
+const GENERATION_PHASE_LABELS: Record<string, string> = {
+  queued: "排队中",
+  parsing: "解析章节",
+  building_skeleton: "构建骨架",
+  ai_generating: "AI 生成",
+  validating: "校验 YAML",
+  completed: "已完成",
+  failed: "生成失败",
+};
 
 function countLikelyChapters(text: string) {
   const matches = text.match(/^\s*(?:#{1,6}\s+)?(?:第\s*(?:\d+|[零〇一二两三四五六七八九十百千万]+)\s*[章节回话]|chapter\s+\d+|\d+\s*[.．、]\s*\S)/gim);
@@ -153,6 +183,22 @@ function getApiErrorMessage(payload: unknown) {
   }
 
   return "生成失败，请检查后端服务和输入内容。";
+}
+
+function getGenerationJobErrorMessage(job: GenerationJobSnapshot) {
+  if (job.error?.code && job.error?.message) {
+    return `${job.error.code}: ${job.error.message}`;
+  }
+
+  return job.message || "生成失败，请稍后重试。";
+}
+
+function getGenerationPhaseLabel(phase: string) {
+  return GENERATION_PHASE_LABELS[phase] ?? phase;
+}
+
+function getApiUrl(pathOrUrl: string) {
+  return new URL(pathOrUrl, API_BASE_URL).toString();
 }
 
 function getFileTitle(fileName: string) {
@@ -1144,6 +1190,11 @@ function App() {
   const [sourceText, setSourceText] = useState(SAMPLE_TEXT);
   const [yamlText, setYamlText] = useState(INITIAL_YAML);
   const [structuredSyncMessage, setStructuredSyncMessage] = useState("等待 YAML 内容");
+  const [generationJob, setGenerationJob] = useState<GenerationJobSnapshot | null>(null);
+  const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
+  const [generationElapsedSeconds, setGenerationElapsedSeconds] = useState(0);
+  const generationEventSourceRef = useRef<EventSource | null>(null);
+  const generationFallbackTimerRef = useRef<number | null>(null);
 
   const characterCount = sourceText.trim().length;
   const chapterCount = countLikelyChapters(sourceText);
@@ -1171,9 +1222,30 @@ function App() {
       : importStatus;
   const copyButtonLabel = copyStatus === "copied" ? "已复制" : copyStatus === "error" ? "复制失败" : "复制 YAML";
   const structuredPreview = parseStructuredScriptPreview(yamlText);
+  const generationProgressPercent = generationJob?.progress ?? 0;
+  const generationPhaseLabel = generationJob ? getGenerationPhaseLabel(generationJob.phase) : "";
 
   useEffect(() => {
     void checkBackend();
+  }, []);
+
+  useEffect(() => {
+    if (!isGenerating || generationStartedAt === null) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setGenerationElapsedSeconds(Math.floor((Date.now() - generationStartedAt) / 1000));
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [generationStartedAt, isGenerating]);
+
+  useEffect(() => {
+    return () => {
+      closeGenerationEventSource();
+      clearGenerationFallbackTimer();
+    };
   }, []);
 
   function resetValidationState(message = "待校验") {
@@ -1332,17 +1404,131 @@ function App() {
     }
   }
 
-  async function generateScript() {
-    const modelLabel = getAIModelGenerationLabel(selectedAIModel);
+  function clearGenerationFallbackTimer() {
+    if (generationFallbackTimerRef.current !== null) {
+      window.clearInterval(generationFallbackTimerRef.current);
+      generationFallbackTimerRef.current = null;
+    }
+  }
+
+  function closeGenerationEventSource() {
+    if (generationEventSourceRef.current) {
+      generationEventSourceRef.current.close();
+      generationEventSourceRef.current = null;
+    }
+  }
+
+  function stopGenerationTracking() {
+    closeGenerationEventSource();
+    clearGenerationFallbackTimer();
+    setGenerationJob(null);
+    setGenerationStartedAt(null);
+    setGenerationElapsedSeconds(0);
+  }
+
+  function handleGenerationJobSnapshot(job: GenerationJobSnapshot, modelLabel: string) {
+    setGenerationJob(job);
+
+    if (job.status === "completed" && job.yaml) {
+      updateYamlText(job.yaml, "生成结果已同步到 YAML 和结构化视图。");
+      setYamlMode("preview");
+      setGenerationStatus("success");
+      setGenerationMessage(`${modelLabel} 已生成 schema ${job.schema_version ?? "0.1.0"}`);
+      setValidationMessage("已生成，待校验");
+      closeGenerationEventSource();
+      clearGenerationFallbackTimer();
+      return;
+    }
+
+    if (job.status === "failed") {
+      setGenerationStatus("error");
+      setGenerationMessage(getGenerationJobErrorMessage(job));
+      closeGenerationEventSource();
+      clearGenerationFallbackTimer();
+      return;
+    }
 
     setGenerationStatus("generating");
-    setGenerationMessage(`正在调用 ${modelLabel} 生成`);
+    setGenerationMessage(`${modelLabel} · ${job.message}`);
+  }
+
+  async function fetchGenerationJobStatus(statusUrl: string, modelLabel: string) {
+    const response = await fetch(getApiUrl(statusUrl));
+    const payload = await readJsonSafely(response);
+
+    if (!response.ok) {
+      throw new Error(getApiErrorMessage(payload));
+    }
+
+    const job = payload as GenerationJobSnapshot;
+    handleGenerationJobSnapshot(job, modelLabel);
+
+    return job;
+  }
+
+  function startGenerationFallbackPolling(statusUrl: string, modelLabel: string) {
+    clearGenerationFallbackTimer();
+
+    const pollStatus = async () => {
+      try {
+        const job = await fetchGenerationJobStatus(statusUrl, modelLabel);
+
+        if (job.status === "completed" || job.status === "failed") {
+          clearGenerationFallbackTimer();
+        }
+      } catch (error) {
+        setGenerationStatus("error");
+        setGenerationMessage(error instanceof Error ? error.message : "生成任务状态查询失败。");
+        clearGenerationFallbackTimer();
+      }
+    };
+
+    generationFallbackTimerRef.current = window.setInterval(() => {
+      void pollStatus();
+    }, 2500);
+    void pollStatus();
+  }
+
+  function connectGenerationJobEvents(eventsUrl: string, statusUrl: string, modelLabel: string) {
+    closeGenerationEventSource();
+
+    const eventSource = new EventSource(getApiUrl(eventsUrl));
+    generationEventSourceRef.current = eventSource;
+
+    const handleEvent = (event: Event) => {
+      const job = JSON.parse((event as MessageEvent).data) as GenerationJobSnapshot;
+      handleGenerationJobSnapshot(job, modelLabel);
+    };
+
+    eventSource.addEventListener("job.status", handleEvent);
+    eventSource.addEventListener("job.completed", handleEvent);
+    eventSource.addEventListener("job.failed", handleEvent);
+    eventSource.onerror = () => {
+      if (generationEventSourceRef.current !== eventSource) {
+        return;
+      }
+
+      closeGenerationEventSource();
+      setGenerationMessage(`${modelLabel} 进度连接断开，正在查询任务状态。`);
+      startGenerationFallbackPolling(statusUrl, modelLabel);
+    };
+  }
+
+  async function generateScript() {
+    const modelLabel = getAIModelGenerationLabel(selectedAIModel);
+    const startedAt = Date.now();
+
+    stopGenerationTracking();
+    setGenerationStatus("generating");
+    setGenerationMessage(`${modelLabel} 任务已提交`);
+    setGenerationStartedAt(startedAt);
+    setGenerationElapsedSeconds(0);
     setImportStatus("idle");
     resetValidationState("生成中，待校验");
     setCopyStatus("idle");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/scripts/generate`, {
+      const response = await fetch(`${API_BASE_URL}/api/scripts/generate/jobs`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1360,14 +1546,20 @@ function App() {
         throw new Error(getApiErrorMessage(payload));
       }
 
-      const result = payload as GenerateScriptResponse;
+      const result = payload as GenerateScriptJobResponse;
 
-      updateYamlText(result.yaml, "生成结果已同步到 YAML 和结构化视图。");
-      setYamlMode("preview");
-      setGenerationStatus("success");
-      setGenerationMessage(`${modelLabel} 已生成 schema ${result.schema_version}`);
-      setValidationMessage("已生成，待校验");
+      setGenerationJob({
+        job_id: result.job_id,
+        status: result.status,
+        phase: "queued",
+        progress: 0,
+        message: "任务已提交，等待开始。",
+        created_at: new Date(startedAt).toISOString(),
+        updated_at: new Date(startedAt).toISOString(),
+      });
+      connectGenerationJobEvents(result.events_url, result.status_url, modelLabel);
     } catch (error) {
+      stopGenerationTracking();
       setGenerationStatus("error");
       setGenerationMessage(error instanceof Error ? error.message : "生成失败，请稍后重试。");
     }
@@ -1444,6 +1636,7 @@ function App() {
   }
 
   function resetSourceText() {
+    stopGenerationTracking();
     setScriptTitle(SAMPLE_TITLE);
     setSourceText(SAMPLE_TEXT);
     setGenerationStatus("idle");
@@ -1453,6 +1646,7 @@ function App() {
   }
 
   function resetYamlText() {
+    stopGenerationTracking();
     updateYamlText(INITIAL_YAML, "已重置为初始 YAML，结构化视图会重新解析。");
     setYamlMode("preview");
     setGenerationStatus("idle");
@@ -1470,6 +1664,7 @@ function App() {
 
     setImportStatus("importing");
     setImportMessage("导入中");
+    stopGenerationTracking();
 
     try {
       const text = await file.text();
@@ -1566,9 +1761,12 @@ function App() {
                 className="ghost-button"
                 type="button"
                 onClick={() => {
+                  stopGenerationTracking();
                   setSourceText("");
                   setImportStatus("idle");
                   setImportMessage("");
+                  setGenerationStatus("idle");
+                  setGenerationMessage("待生成");
                 }}
               >
                 清空
@@ -1593,7 +1791,31 @@ function App() {
             placeholder={"第 1 章 ...\n\n第 2 章 ...\n\n第 3 章 ..."}
           />
           <div className="panel-footer">
-            <span className={`generation-message ${inputMessageStatus}`}>{inputMessage}</span>
+            <div className="generation-status-block">
+              <span className={`generation-message ${inputMessageStatus}`}>{inputMessage}</span>
+              {generationJob ? (
+                <div className="generation-progress" data-testid="generation-progress">
+                  <div className="generation-progress-meta">
+                    <span>{generationPhaseLabel}</span>
+                    <strong>{generationProgressPercent}%</strong>
+                  </div>
+                  <div
+                    className="generation-progress-track"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={generationProgressPercent}
+                    aria-label="生成进度"
+                  >
+                    <span style={{ width: `${generationProgressPercent}%` }} />
+                  </div>
+                  <div className="generation-progress-detail">
+                    <span>{getAIModelGenerationLabel(selectedAIModel)}</span>
+                    <span>{generationElapsedSeconds}s</span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
             <div className="generation-controls">
               <label className="model-select-field" htmlFor="ai-model-select">
                 <span>模型</span>

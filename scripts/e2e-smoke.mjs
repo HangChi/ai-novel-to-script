@@ -278,6 +278,11 @@ async function runBrowserSmoke() {
 
     await page.getByTestId("generate-yaml-button").click();
     await page.waitForFunction(
+      () => document.querySelector('[data-testid="generation-progress"]')?.textContent?.includes("%"),
+      null,
+      { timeout: 10_000 },
+    );
+    await page.waitForFunction(
       () => document.querySelector('[data-testid="yaml-preview"]')?.textContent?.includes("type: narration"),
       null,
       { timeout: 10_000 },

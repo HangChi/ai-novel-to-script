@@ -3,6 +3,7 @@ from typing import Any, NoReturn
 
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from app.ai_provider import (
     AIProviderError,
@@ -14,6 +15,7 @@ from app.ai_provider import (
 )
 from app.chapter_parser import ChapterParseError, parse_novel_chapters
 from app.config_file import load_config_files
+from app.generation_jobs import GenerationJobStore, ProgressCallback
 from app.script_draft import SCHEMA_VERSION, build_script_yaml
 from app.script_validator import validate_script_yaml
 
@@ -31,6 +33,7 @@ def _build_frontend_dev_origins() -> list[str]:
 
 
 FRONTEND_DEV_ORIGINS = _build_frontend_dev_origins()
+generation_jobs = GenerationJobStore(max_workers=1)
 
 app = FastAPI(
     title="AI Novel to Script API",
@@ -89,26 +92,55 @@ def _read_text_field(payload: dict[str, Any], field_name: str, default: str = ""
     return value
 
 
-@app.post("/api/scripts/generate", tags=["scripts"])
-def generate_script(payload: dict[str, Any] = Body(...)) -> dict[str, str]:
-    title = _read_text_field(payload, "title")
-    content = _read_text_field(payload, "content")
-    output_format = _read_text_field(payload, "output_format", "yaml")
-    model_id = _read_text_field(payload, "model_id", "").strip()
-    output_language = _read_text_field(payload, "output_language", "").strip()
+class ScriptGenerationError(RuntimeError):
+    def __init__(self, code: str, message: str, status_code: int = 400) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+
+
+def _read_generate_script_request(payload: dict[str, Any]) -> dict[str, str]:
+    return {
+        "title": _read_text_field(payload, "title"),
+        "content": _read_text_field(payload, "content"),
+        "output_format": _read_text_field(payload, "output_format", "yaml"),
+        "model_id": _read_text_field(payload, "model_id", "").strip(),
+        "output_language": _read_text_field(payload, "output_language", "").strip(),
+    }
+
+
+def _generate_script_result(
+    request_payload: dict[str, str],
+    progress: ProgressCallback | None = None,
+) -> dict[str, str]:
+    title = request_payload["title"]
+    content = request_payload["content"]
+    output_format = request_payload["output_format"]
+    model_id = request_payload["model_id"]
+    output_language = request_payload["output_language"]
 
     if output_format != "yaml":
-        _bad_request("INVALID_INPUT", "output_format currently only supports yaml.")
+        raise ScriptGenerationError("INVALID_INPUT", "output_format currently only supports yaml.")
 
     if model_id and not is_ai_model_id_supported(model_id):
-        _bad_request("INVALID_INPUT", "model_id is not supported.")
+        raise ScriptGenerationError("INVALID_INPUT", "model_id is not supported.")
+
+    if progress:
+        progress("parsing", 10, "正在解析章节。")
 
     try:
         chapters = parse_novel_chapters(content)
     except ChapterParseError as error:
-        _bad_request(error.code, error.message)
+        raise ScriptGenerationError(error.code, error.message) from error
+
+    if progress:
+        progress("building_skeleton", 25, "正在构建 YAML 骨架。")
 
     skeleton_yaml = build_script_yaml(title=title, chapters=chapters)
+
+    if progress:
+        progress("ai_generating", 55, "正在调用 AI 模型生成剧本。")
 
     try:
         yaml_text = generate_script_with_ai(
@@ -118,13 +150,69 @@ def generate_script(payload: dict[str, Any] = Body(...)) -> dict[str, str]:
             output_language=output_language or None,
         )
     except AIProviderError as error:
-        _api_error(502, "AI_GENERATION_FAILED", str(error))
+        raise ScriptGenerationError("AI_GENERATION_FAILED", str(error), status_code=502) from error
+
+    if progress:
+        progress("validating", 85, "正在校验 YAML 结构。")
+
+    validation = validate_script_yaml(yaml_text)
+
+    if not validation.valid:
+        error_paths = ", ".join(error.path or "<root>" for error in validation.errors[:5])
+        raise ScriptGenerationError(
+            "AI_GENERATION_FAILED",
+            f"AI response did not match YAML schema: {error_paths}",
+            status_code=502,
+        )
 
     return {
         "status": "completed",
         "schema_version": SCHEMA_VERSION,
         "yaml": yaml_text,
     }
+
+
+@app.post("/api/scripts/generate", tags=["scripts"])
+def generate_script(payload: dict[str, Any] = Body(...)) -> dict[str, str]:
+    try:
+        return _generate_script_result(_read_generate_script_request(payload))
+    except ScriptGenerationError as error:
+        _api_error(error.status_code, error.code, error.message)
+
+
+@app.post("/api/scripts/generate/jobs", tags=["scripts"])
+def create_generate_script_job(payload: dict[str, Any] = Body(...)) -> dict[str, str]:
+    request_payload = _read_generate_script_request(payload)
+    job = generation_jobs.create(lambda progress: _generate_script_result(request_payload, progress=progress))
+
+    return {
+        "job_id": job.job_id,
+        "status": "queued",
+        "status_url": f"/api/scripts/generate/jobs/{job.job_id}",
+        "events_url": f"/api/scripts/generate/jobs/{job.job_id}/events",
+    }
+
+
+@app.get("/api/scripts/generate/jobs/{job_id}", tags=["scripts"])
+def read_generate_script_job(job_id: str) -> dict[str, object]:
+    job = generation_jobs.get(job_id)
+
+    if job is None:
+        _api_error(404, "JOB_NOT_FOUND", "Generation job was not found.")
+
+    return job.to_dict()
+
+
+@app.get("/api/scripts/generate/jobs/{job_id}/events", tags=["scripts"])
+def stream_generate_script_job_events(job_id: str) -> StreamingResponse:
+    return StreamingResponse(
+        generation_jobs.stream(job_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.post("/api/scripts/validate", tags=["scripts"])
