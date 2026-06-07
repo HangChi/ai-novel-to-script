@@ -461,7 +461,7 @@ textarea::placeholder {
   height: 100%;
   border-radius: inherit;
   background: #2c7a65;
-  transition: width 180ms ease;
+  transition: width 520ms ease;
 }
 
 .generation-controls {

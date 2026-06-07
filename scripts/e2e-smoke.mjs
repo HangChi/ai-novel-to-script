@@ -278,7 +278,10 @@ async function runBrowserSmoke() {
 
     await page.getByTestId("generate-yaml-button").click();
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="generation-progress"]')?.textContent?.includes("%"),
+      () => {
+        const progressText = document.querySelector('[data-testid="generation-progress"]')?.textContent ?? "";
+        return progressText.includes("%") && progressText.includes("阶段估算");
+      },
       null,
       { timeout: 10_000 },
     );

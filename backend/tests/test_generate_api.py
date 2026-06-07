@@ -290,6 +290,7 @@ def test_generate_script_job_preserves_ai_provider_failure(monkeypatch) -> None:
         "code": "AI_GENERATION_FAILED",
         "message": "provider unavailable",
     }
+    assert yaml.safe_load(job["preview_yaml"])["script"]["title"] == "Rain Letter"
 
 
 def test_generate_script_job_events_stream_status_and_completed() -> None:
