@@ -393,6 +393,13 @@ textarea::placeholder {
   background: #fbfcfd;
 }
 
+.generation-status-block {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 8px;
+}
+
 .generation-message {
   min-width: 0;
   color: #66758a;
@@ -412,6 +419,49 @@ textarea::placeholder {
 .generation-message.generating,
 .generation-message.importing {
   color: #846118;
+}
+
+.generation-progress {
+  display: grid;
+  max-width: 420px;
+  gap: 5px;
+}
+
+.generation-progress-meta,
+.generation-progress-detail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.generation-progress-meta span,
+.generation-progress-detail span {
+  color: #607086;
+  font-size: 0.76rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.generation-progress-meta strong {
+  color: #314156;
+  font-size: 0.78rem;
+}
+
+.generation-progress-track {
+  width: 100%;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dfe6ef;
+}
+
+.generation-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2c7a65;
+  transition: width 180ms ease;
 }
 
 .generation-controls {
@@ -1079,6 +1129,10 @@ textarea::placeholder {
   .panel-footer {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .generation-progress {
+    max-width: none;
   }
 
   .generation-controls {

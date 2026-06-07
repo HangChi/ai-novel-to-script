@@ -1,3 +1,5 @@
+from time import sleep
+
 import yaml
 from fastapi.testclient import TestClient
 
@@ -19,6 +21,20 @@ Su finds a note under the lamp.
 Chapter 3: Decision
 They choose to leave before dawn.
 """
+
+
+def _wait_for_job(job_id: str, terminal_status: str = "completed") -> dict[str, object]:
+    for _ in range(40):
+        response = client.get(f"/api/scripts/generate/jobs/{job_id}")
+        assert response.status_code == 200
+        payload = response.json()
+
+        if payload["status"] == terminal_status:
+            return payload
+
+        sleep(0.05)
+
+    raise AssertionError(f"job {job_id} did not reach {terminal_status}")
 
 
 def test_generate_script_returns_yaml_draft() -> None:
@@ -172,4 +188,160 @@ def test_generate_script_reports_ai_provider_failure(monkeypatch) -> None:
     assert response.json()["detail"] == {
         "code": "AI_GENERATION_FAILED",
         "message": "provider unavailable",
+    }
+
+
+def test_create_generate_script_job_returns_status_and_events_urls() -> None:
+    response = client.post(
+        "/api/scripts/generate/jobs",
+        json={
+            "title": "Rain Letter",
+            "content": _novel_text(),
+            "output_format": "yaml",
+            "model_id": "local",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["job_id"].startswith("job-")
+    assert payload["status"] == "queued"
+    assert payload["status_url"] == f"/api/scripts/generate/jobs/{payload['job_id']}"
+    assert payload["events_url"] == f"/api/scripts/generate/jobs/{payload['job_id']}/events"
+    assert _wait_for_job(payload["job_id"])["status"] == "completed"
+
+
+def test_generate_script_job_completes_with_yaml() -> None:
+    response = client.post(
+        "/api/scripts/generate/jobs",
+        json={
+            "title": "Rain Letter",
+            "content": _novel_text(),
+            "output_format": "yaml",
+            "model_id": "local",
+        },
+    )
+
+    assert response.status_code == 200
+    job = _wait_for_job(response.json()["job_id"])
+    script = yaml.safe_load(job["yaml"])["script"]
+
+    assert job["status"] == "completed"
+    assert job["phase"] == "completed"
+    assert job["progress"] == 100
+    assert job["schema_version"] == "0.1.0"
+    assert script["title"] == "Rain Letter"
+    assert script["source"]["chapters_count"] == 3
+
+
+def test_generate_script_job_fails_for_chapter_parse_error() -> None:
+    response = client.post(
+        "/api/scripts/generate/jobs",
+        json={
+            "title": "Short Story",
+            "content": """
+Chapter 1
+First scene.
+
+Chapter 2
+Second scene.
+""",
+            "model_id": "local",
+        },
+    )
+
+    assert response.status_code == 200
+    job = _wait_for_job(response.json()["job_id"], terminal_status="failed")
+
+    assert job["status"] == "failed"
+    assert job["phase"] == "failed"
+    assert job["progress"] == 100
+    assert job["error"]["code"] == "INVALID_CHAPTER_COUNT"
+    assert "yaml" not in job
+
+
+def test_generate_script_job_preserves_ai_provider_failure(monkeypatch) -> None:
+    def fail_generation(
+        title: str,
+        skeleton_yaml: str,
+        model_id: str | None = None,
+        output_language: str | None = None,
+    ) -> str:
+        raise AIProviderError("provider unavailable")
+
+    monkeypatch.setattr("app.main.generate_script_with_ai", fail_generation)
+
+    response = client.post(
+        "/api/scripts/generate/jobs",
+        json={
+            "title": "Rain Letter",
+            "content": _novel_text(),
+            "output_format": "yaml",
+            "model_id": "local",
+        },
+    )
+
+    assert response.status_code == 200
+    job = _wait_for_job(response.json()["job_id"], terminal_status="failed")
+
+    assert job["status"] == "failed"
+    assert job["error"] == {
+        "code": "AI_GENERATION_FAILED",
+        "message": "provider unavailable",
+    }
+
+
+def test_generate_script_job_events_stream_status_and_completed() -> None:
+    response = client.post(
+        "/api/scripts/generate/jobs",
+        json={
+            "title": "Rain Letter",
+            "content": _novel_text(),
+            "output_format": "yaml",
+            "model_id": "local",
+        },
+    )
+
+    assert response.status_code == 200
+    events_url = response.json()["events_url"]
+
+    with client.stream("GET", events_url) as event_response:
+        assert event_response.status_code == 200
+        body = "".join(event_response.iter_text())
+
+    assert "event: job.status" in body
+    assert "event: job.completed" in body
+    assert '"progress": 100' in body
+
+
+def test_generate_script_job_status_returns_completed_yaml_after_events() -> None:
+    response = client.post(
+        "/api/scripts/generate/jobs",
+        json={
+            "title": "Rain Letter",
+            "content": _novel_text(),
+            "output_format": "yaml",
+            "model_id": "local",
+        },
+    )
+
+    assert response.status_code == 200
+    completed = _wait_for_job(response.json()["job_id"])
+
+    status_response = client.get(f"/api/scripts/generate/jobs/{completed['job_id']}")
+
+    assert status_response.status_code == 200
+    payload = status_response.json()
+    assert payload["status"] == "completed"
+    assert payload["yaml"] == completed["yaml"]
+
+
+def test_generate_script_job_status_rejects_unknown_job() -> None:
+    response = client.get("/api/scripts/generate/jobs/job-missing")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "JOB_NOT_FOUND",
+        "message": "Generation job was not found.",
     }

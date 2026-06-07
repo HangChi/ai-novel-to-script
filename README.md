@@ -14,6 +14,7 @@ AI Novel to Script 是一款面向小说作者和编剧的 AI 辅助改编工具
 - 小说输入：支持直接粘贴文本，也支持导入本地 `.txt` 或 `.md` 文件。
 - 章节校验：要求至少 3 个章节，并支持常见中文、英文和 Markdown 章节标题格式。
 - 剧本生成：输出符合 `0.1.0` Schema 的 YAML 剧本初稿。
+- 后台进度：生成按钮会创建后台任务，并通过 SSE 展示阶段、百分比、模型和耗时。
 - 模型选择：支持本地骨架、DeepSeek-V4-Pro、Kimi-2.6、GLM-4.7-FlashX 和通用 OpenAI-compatible Provider。
 - 结构化预览：把 YAML 映射为标题、logline、人物、场景、登场人物和 beats。
 - 局部编辑：支持编辑标题、logline、人物、场景信息、对白说话人、beat 类型与文本，并支持新增、删除人物、场景和 beat。
@@ -121,7 +122,7 @@ cd ..
 1. 打开 `http://127.0.0.1:5173`。
 2. 点击“导入文件”，选择 `docs/examples/rain-letter-novel.txt`。
 3. 保持模型为“本地骨架”，或选择已配置密钥的远程模型。
-4. 点击“生成 YAML”。
+4. 点击“生成 YAML”，观察进度从排队、解析、构建骨架、AI 生成到校验完成。
 5. 在结构化预览中检查标题、logline、人物、场景和 beats。
 6. 修改标题、logline、人物、场景信息或 beats，确认页面提示已同步到 YAML。
 7. 点击“校验 YAML”，确认显示结构有效。
@@ -203,6 +204,9 @@ GLM_TEMPERATURE=0.3
 | `GET` | `/api/ai/status` | 当前 AI Provider 配置状态 |
 | `GET` | `/api/ai/models` | 前端模型下拉选项 |
 | `POST` | `/api/scripts/generate` | 根据小说文本生成剧本 YAML |
+| `POST` | `/api/scripts/generate/jobs` | 创建后台生成任务 |
+| `GET` | `/api/scripts/generate/jobs/{job_id}` | 查询后台生成任务状态 |
+| `GET` | `/api/scripts/generate/jobs/{job_id}/events` | 监听后台生成任务 SSE 进度 |
 | `POST` | `/api/scripts/validate` | 校验剧本 YAML 是否符合 Schema |
 
 接口细节见 [docs/接口文档.md](docs/接口文档.md)。
@@ -252,4 +256,4 @@ GLM_TEMPERATURE=0.3
 
 ## 当前状态
 
-当前主分支已具备本地演示能力：在默认 `local` 模式下，不依赖外部 AI 服务即可完成导入示例小说、生成 YAML、结构化编辑、校验、复制和下载。后续重点是补充持久化、版本历史、更多导出格式和更细粒度的 AI 输出质量评测。
+当前主分支已具备本地演示能力：在默认 `local` 模式下，不依赖外部 AI 服务即可完成导入示例小说、后台生成 YAML、查看进度、结构化编辑、校验、复制和下载。后续重点是补充分块生成、持久化、版本历史、更多导出格式和更细粒度的 AI 输出质量评测。
