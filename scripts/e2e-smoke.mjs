@@ -15,6 +15,28 @@ const frontendPort = Number(process.env.FRONTEND_PORT ?? 5173);
 const backendBaseUrl = `http://127.0.0.1:${backendPort}`;
 const frontendBaseUrl = `http://127.0.0.1:${frontendPort}`;
 const spawnedProcesses = [];
+const screenplayYamlKeys = [
+  "script",
+  "schema_version",
+  "title",
+  "logline",
+  "source",
+  "type",
+  "chapters_count",
+  "chapter_titles",
+  "characters",
+  "id",
+  "name",
+  "role",
+  "description",
+  "scenes",
+  "source_chapter",
+  "location",
+  "time",
+  "beats",
+  "text",
+  "character",
+];
 
 function log(message) {
   console.log(`[smoke] ${message}`);
@@ -59,6 +81,13 @@ function spawnProcess(command, args, cwd, label, env = process.env) {
   });
   spawnedProcesses.push(child);
   return child;
+}
+
+function quoteScreenplayYamlKeys(yamlText) {
+  const keyPattern = screenplayYamlKeys.join("|");
+  const linePattern = new RegExp(`^(\\s*)(${keyPattern})(\\s*:)`, "gm");
+
+  return yamlText.replace(linePattern, '$1"$2"$3');
 }
 
 async function ensureBackend() {
@@ -261,6 +290,23 @@ async function runBrowserSmoke() {
     if (beatCount < 3) {
       throw new Error(`structured preview rendered ${beatCount} beats`);
     }
+
+    const quotedKeyYamlText = quoteScreenplayYamlKeys(yamlText);
+    await page.getByTestId("toggle-yaml-edit-button").click();
+    await page.getByTestId("yaml-editor").fill(quotedKeyYamlText);
+    await page.getByTestId("toggle-yaml-edit-button").click();
+    await page.waitForFunction(
+      () => {
+        const input = document.querySelector('[data-testid="structured-title-input"]');
+        const previewText = document.querySelector('[data-testid="yaml-preview"]')?.textContent ?? "";
+        return input instanceof HTMLInputElement
+          && input.value.includes("rain-letter-novel")
+          && previewText.startsWith("script:")
+          && !previewText.includes('"script":');
+      },
+      null,
+      { timeout: 10_000 },
+    );
 
     await page.getByTestId("structured-title-input").fill("Rain Letter Script");
     await page.getByTestId("structured-logline-input").fill("A letter pulls two strangers toward a dawn choice.");

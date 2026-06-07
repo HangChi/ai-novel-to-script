@@ -13,6 +13,28 @@ type YamlMode = "preview" | "edit";
 type StructuredPreviewStatus = "ready" | "empty" | "error";
 
 const BEAT_TYPE_OPTIONS = ["action", "dialogue", "narration", "transition"] as const;
+const SCRIPT_YAML_KEYS = new Set([
+  "script",
+  "schema_version",
+  "title",
+  "logline",
+  "source",
+  "type",
+  "chapters_count",
+  "chapter_titles",
+  "characters",
+  "id",
+  "name",
+  "role",
+  "description",
+  "scenes",
+  "source_chapter",
+  "location",
+  "time",
+  "beats",
+  "text",
+  "character",
+]);
 
 type GenerateScriptResponse = {
   status: "completed";
@@ -131,6 +153,19 @@ function readYamlScalar(rawValue: string) {
   }
 
   return value;
+}
+
+function normalizeKnownQuotedYamlKeys(yamlText: string) {
+  return yamlText.replace(
+    /^(\s*)["']([A-Za-z_][A-Za-z0-9_]*)["'](\s*:)/gm,
+    (line, indent: string, key: string, suffix: string) => {
+      if (!SCRIPT_YAML_KEYS.has(key)) {
+        return line;
+      }
+
+      return `${indent}${key}${suffix}`;
+    },
+  );
 }
 
 function escapeYamlDoubleQuotedValue(value: string) {
@@ -930,7 +965,7 @@ function parseStructuredScriptPreview(yamlText: string): StructuredPreviewResult
     };
   }
 
-  const lines = yamlText.split(/\r?\n/);
+  const lines = normalizeKnownQuotedYamlKeys(yamlText).split(/\r?\n/);
 
   if (!lines.some((line) => line.trim() === "script:")) {
     return {
@@ -1122,7 +1157,7 @@ function App() {
   }
 
   function updateYamlText(nextYamlText: string, syncMessage = "YAML 已修改，结构化视图会重新解析。") {
-    setYamlText(nextYamlText);
+    setYamlText(normalizeKnownQuotedYamlKeys(nextYamlText));
     resetValidationState("YAML 已修改，待校验");
     setCopyStatus("idle");
     setStructuredSyncMessage(syncMessage);
