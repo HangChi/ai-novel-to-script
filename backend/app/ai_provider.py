@@ -283,7 +283,11 @@ class OpenAICompatibleScriptAIProvider:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 response_payload = json.loads(response.read().decode("utf-8"))
         except HTTPError as error:
-            raise AIProviderError(f"AI provider returned HTTP {error.code}.") from error
+            detail = _extract_http_error_detail(error)
+            suffix = f" {detail}" if detail else ""
+            raise AIProviderError(
+                f"AI provider returned HTTP {error.code}.{suffix}"
+            ) from error
         except (TimeoutError, URLError) as error:
             raise AIProviderError("AI provider request failed.") from error
         except json.JSONDecodeError as error:
@@ -298,6 +302,62 @@ class OpenAICompatibleScriptAIProvider:
             raise AIProviderError("AI provider returned empty content.")
 
         return content
+
+
+def _extract_http_error_detail(error: HTTPError) -> str:
+    try:
+        body = error.read().decode("utf-8", errors="replace").strip()
+    except (OSError, ValueError):
+        return ""
+
+    if not body:
+        return ""
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return _truncate_error_detail(body)
+
+    message = _read_error_message(payload)
+
+    return _truncate_error_detail(message) if message else ""
+
+
+def _read_error_message(payload: Any) -> str:
+    if isinstance(payload, str):
+        return payload.strip()
+
+    if not isinstance(payload, dict):
+        return ""
+
+    error = payload.get("error", payload)
+
+    if isinstance(error, str):
+        return error.strip()
+
+    if isinstance(error, dict):
+        for key in ("message", "msg", "detail", "reason"):
+            value = error.get(key)
+
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    for key in ("message", "msg", "detail", "reason"):
+        value = payload.get(key)
+
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    return ""
+
+
+def _truncate_error_detail(detail: str, limit: int = 300) -> str:
+    collapsed = " ".join(detail.split())
+
+    if len(collapsed) <= limit:
+        return collapsed
+
+    return f"{collapsed[:limit].rstrip()}…"
 
 
 def _build_rewrite_prompt(title: str, skeleton_yaml: str, output_language: str) -> str:

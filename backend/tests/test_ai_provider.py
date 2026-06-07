@@ -1,4 +1,6 @@
+import io
 from pathlib import Path
+from urllib.error import HTTPError
 
 import pytest
 import yaml
@@ -546,3 +548,75 @@ def test_openai_provider_rejects_invalid_yaml_response(monkeypatch: pytest.Monke
 
     with pytest.raises(AIProviderError, match="AI response did not match YAML schema"):
         provider.generate_script_yaml("Rain Letter", "skeleton")
+
+
+def _raise_http_error(body: bytes, code: int = 400):
+    def fake_urlopen(request, timeout=None):
+        raise HTTPError(
+            url="https://api.example.test/v1/chat/completions",
+            code=code,
+            msg="Bad Request",
+            hdrs={},
+            fp=io.BytesIO(body),
+        )
+
+    return fake_urlopen
+
+
+def test_request_completion_surfaces_openai_style_error_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="missing-model")
+    body = b'{"error": {"message": "Model Not Exist", "type": "invalid_request_error"}}'
+
+    monkeypatch.setattr("app.ai_provider.urlopen", _raise_http_error(body))
+
+    with pytest.raises(AIProviderError) as excinfo:
+        provider.generate_script_yaml("Rain Letter", "skeleton")
+
+    message = str(excinfo.value)
+
+    assert "HTTP 400" in message
+    assert "Model Not Exist" in message
+
+
+def test_request_completion_surfaces_plain_text_error_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="bad-key", model="test-model")
+
+    monkeypatch.setattr(
+        "app.ai_provider.urlopen",
+        _raise_http_error(b"Invalid API key provided", code=401),
+    )
+
+    with pytest.raises(AIProviderError) as excinfo:
+        provider.generate_script_yaml("Rain Letter", "skeleton")
+
+    message = str(excinfo.value)
+
+    assert "HTTP 401" in message
+    assert "Invalid API key provided" in message
+
+
+def test_request_completion_handles_empty_error_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
+
+    monkeypatch.setattr("app.ai_provider.urlopen", _raise_http_error(b"", code=500))
+
+    with pytest.raises(AIProviderError) as excinfo:
+        provider.generate_script_yaml("Rain Letter", "skeleton")
+
+    assert str(excinfo.value) == "AI provider returned HTTP 500."
+
+
+def test_request_completion_truncates_long_error_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
+    long_reason = "x" * 600
+    body = f'{{"error": {{"message": "{long_reason}"}}}}'.encode("utf-8")
+
+    monkeypatch.setattr("app.ai_provider.urlopen", _raise_http_error(body))
+
+    with pytest.raises(AIProviderError) as excinfo:
+        provider.generate_script_yaml("Rain Letter", "skeleton")
+
+    message = str(excinfo.value)
+
+    assert message.endswith("…")
+    assert len(message) < len(long_reason)
