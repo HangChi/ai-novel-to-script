@@ -1,5 +1,7 @@
 # AI Novel to Script
 
+> 七牛云 x XEngineer 暑期实训项目：6.5-6.7批次，题目三：AI 小说转剧本工具
+
 AI Novel to Script 是一款面向小说作者和编剧的 AI 辅助改编工具。它可以把至少 3 个章节的小说文本转换为结构化剧本 YAML 初稿，并提供结构化预览、局部编辑、Schema 校验、复制和下载能力，帮助作者更快完成从小说叙事到剧本草稿的第一轮整理。
 
 当前版本以本地可复现演示为优先目标：默认 `local` 模式不需要任何 API Key，会返回稳定的 YAML 骨架；填写远程模型密钥后，也可以在页面上选择 DeepSeek-V4-Pro、Kimi-2.6 或 GLM-4.7-FlashX 生成 AI 改编初稿。
