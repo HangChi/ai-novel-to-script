@@ -140,7 +140,7 @@ def _generate_script_result(
     skeleton_yaml = build_script_yaml(title=title, chapters=chapters)
 
     if progress:
-        progress("ai_generating", 55, "正在调用 AI 模型生成剧本。")
+        progress("ai_generating", 55, "正在调用 AI 模型生成剧本。", skeleton_yaml)
 
     try:
         yaml_text = generate_script_with_ai(

@@ -65,6 +65,7 @@ type GenerationJobSnapshot = {
   created_at: string;
   updated_at: string;
   schema_version?: string;
+  preview_yaml?: string;
   yaml?: string;
   error?: GenerationJobError;
 };
@@ -158,6 +159,15 @@ const GENERATION_PHASE_LABELS: Record<string, string> = {
   completed: "已完成",
   failed: "生成失败",
 };
+const GENERATION_PHASE_PROGRESS_CAPS: Record<string, number> = {
+  queued: 8,
+  parsing: 22,
+  building_skeleton: 52,
+  ai_generating: 84,
+  validating: 96,
+  completed: 100,
+  failed: 100,
+};
 
 function countLikelyChapters(text: string) {
   const matches = text.match(/^\s*(?:#{1,6}\s+)?(?:第\s*(?:\d+|[零〇一二两三四五六七八九十百千万]+)\s*[章节回话]|chapter\s+\d+|\d+\s*[.．、]\s*\S)/gim);
@@ -195,6 +205,24 @@ function getGenerationJobErrorMessage(job: GenerationJobSnapshot) {
 
 function getGenerationPhaseLabel(phase: string) {
   return GENERATION_PHASE_LABELS[phase] ?? phase;
+}
+
+function getGenerationProgressTarget(job: GenerationJobSnapshot) {
+  return Math.max(job.progress, GENERATION_PHASE_PROGRESS_CAPS[job.phase] ?? job.progress);
+}
+
+function getGenerationProgressStep(currentProgress: number, targetProgress: number) {
+  const remaining = targetProgress - currentProgress;
+
+  if (remaining >= 18) {
+    return 3;
+  }
+
+  if (remaining >= 8) {
+    return 2;
+  }
+
+  return 1;
 }
 
 function getApiUrl(pathOrUrl: string) {
@@ -1193,8 +1221,10 @@ function App() {
   const [generationJob, setGenerationJob] = useState<GenerationJobSnapshot | null>(null);
   const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
   const [generationElapsedSeconds, setGenerationElapsedSeconds] = useState(0);
+  const [generationDisplayedProgress, setGenerationDisplayedProgress] = useState(0);
   const generationEventSourceRef = useRef<EventSource | null>(null);
   const generationFallbackTimerRef = useRef<number | null>(null);
+  const generationPreviewYamlRef = useRef<string | null>(null);
 
   const characterCount = sourceText.trim().length;
   const chapterCount = countLikelyChapters(sourceText);
@@ -1222,7 +1252,7 @@ function App() {
       : importStatus;
   const copyButtonLabel = copyStatus === "copied" ? "已复制" : copyStatus === "error" ? "复制失败" : "复制 YAML";
   const structuredPreview = parseStructuredScriptPreview(yamlText);
-  const generationProgressPercent = generationJob?.progress ?? 0;
+  const generationProgressPercent = generationJob ? generationDisplayedProgress : 0;
   const generationPhaseLabel = generationJob ? getGenerationPhaseLabel(generationJob.phase) : "";
 
   useEffect(() => {
@@ -1240,6 +1270,29 @@ function App() {
 
     return () => window.clearInterval(intervalId);
   }, [generationStartedAt, isGenerating]);
+
+  useEffect(() => {
+    if (!isGenerating || !generationJob) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setGenerationDisplayedProgress((currentProgress) => {
+        const targetProgress = getGenerationProgressTarget(generationJob);
+
+        if (currentProgress >= targetProgress) {
+          return currentProgress;
+        }
+
+        return Math.min(
+          targetProgress,
+          currentProgress + getGenerationProgressStep(currentProgress, targetProgress),
+        );
+      });
+    }, 700);
+
+    return () => window.clearInterval(intervalId);
+  }, [generationJob?.phase, generationJob?.progress, generationJob?.status, isGenerating]);
 
   useEffect(() => {
     return () => {
@@ -1424,12 +1477,26 @@ function App() {
     setGenerationJob(null);
     setGenerationStartedAt(null);
     setGenerationElapsedSeconds(0);
+    setGenerationDisplayedProgress(0);
+    generationPreviewYamlRef.current = null;
   }
 
   function handleGenerationJobSnapshot(job: GenerationJobSnapshot, modelLabel: string) {
     setGenerationJob(job);
+    setGenerationDisplayedProgress((currentProgress) => Math.max(currentProgress, job.progress));
+
+    if (
+      job.preview_yaml &&
+      job.status !== "completed" &&
+      generationPreviewYamlRef.current !== job.preview_yaml
+    ) {
+      generationPreviewYamlRef.current = job.preview_yaml;
+      updateYamlText(job.preview_yaml, "已生成 YAML 骨架预览，等待模型返回最终版本。");
+      setYamlMode("preview");
+    }
 
     if (job.status === "completed" && job.yaml) {
+      setGenerationDisplayedProgress(100);
       updateYamlText(job.yaml, "生成结果已同步到 YAML 和结构化视图。");
       setYamlMode("preview");
       setGenerationStatus("success");
@@ -1441,6 +1508,7 @@ function App() {
     }
 
     if (job.status === "failed") {
+      setGenerationDisplayedProgress(100);
       setGenerationStatus("error");
       setGenerationMessage(getGenerationJobErrorMessage(job));
       closeGenerationEventSource();
@@ -1523,6 +1591,7 @@ function App() {
     setGenerationMessage(`${modelLabel} 任务已提交`);
     setGenerationStartedAt(startedAt);
     setGenerationElapsedSeconds(0);
+    setGenerationDisplayedProgress(0);
     setImportStatus("idle");
     resetValidationState("生成中，待校验");
     setCopyStatus("idle");
@@ -1810,7 +1879,7 @@ function App() {
                     <span style={{ width: `${generationProgressPercent}%` }} />
                   </div>
                   <div className="generation-progress-detail">
-                    <span>{getAIModelGenerationLabel(selectedAIModel)}</span>
+                    <span>阶段估算 · {getAIModelGenerationLabel(selectedAIModel)}</span>
                     <span>{generationElapsedSeconds}s</span>
                   </div>
                 </div>

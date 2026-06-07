@@ -6,14 +6,27 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 import json
 from threading import Condition, Lock
+from typing import Protocol
 from uuid import uuid4
 
 
 JobStatus = str
-ProgressCallback = Callable[[str, int, str], None]
-JobRunner = Callable[[ProgressCallback], dict[str, str]]
 
 TERMINAL_STATUSES = {"completed", "failed"}
+
+
+class ProgressCallback(Protocol):
+    def __call__(
+        self,
+        phase: str,
+        progress: int,
+        message: str,
+        preview_yaml: str | None = None,
+    ) -> None:
+        ...
+
+
+JobRunner = Callable[[ProgressCallback], dict[str, str]]
 
 
 @dataclass(frozen=True)
@@ -44,6 +57,7 @@ class GenerationJob:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     schema_version: str | None = None
+    preview_yaml: str | None = None
     yaml: str | None = None
     error: GenerationJobError | None = None
     events: list[GenerationJobEvent] = field(default_factory=list)
@@ -61,6 +75,9 @@ class GenerationJob:
 
         if self.schema_version is not None:
             payload["schema_version"] = self.schema_version
+
+        if self.preview_yaml is not None:
+            payload["preview_yaml"] = self.preview_yaml
 
         if self.yaml is not None:
             payload["yaml"] = self.yaml
@@ -145,11 +162,12 @@ class GenerationJobStore:
     def _run(self, job_id: str, runner: JobRunner) -> None:
         try:
             result = runner(
-                lambda phase, progress, message: self.update(
+                lambda phase, progress, message, preview_yaml=None: self.update(
                     job_id,
                     phase=phase,
                     progress=progress,
                     message=message,
+                    preview_yaml=preview_yaml,
                 )
             )
 
@@ -164,7 +182,14 @@ class GenerationJobStore:
             message = getattr(error, "message", str(error) or "生成任务失败。")
             self.fail(job_id, code=code, message=message)
 
-    def update(self, job_id: str, phase: str, progress: int, message: str) -> None:
+    def update(
+        self,
+        job_id: str,
+        phase: str,
+        progress: int,
+        message: str,
+        preview_yaml: str | None = None,
+    ) -> None:
         with self._condition:
             job = self._jobs.get(job_id)
 
@@ -175,6 +200,8 @@ class GenerationJobStore:
             job.phase = phase
             job.progress = progress
             job.message = message
+            if preview_yaml is not None:
+                job.preview_yaml = preview_yaml
             job.updated_at = datetime.now(UTC)
             job.events.append(GenerationJobEvent(name="job.status", payload=job.to_dict()))
             self._condition.notify_all()
@@ -192,6 +219,7 @@ class GenerationJobStore:
             job.message = message
             job.yaml = yaml_text
             job.schema_version = schema_version
+            job.preview_yaml = None
             job.updated_at = datetime.now(UTC)
             job.events.append(GenerationJobEvent(name="job.completed", payload=job.to_dict()))
             self._condition.notify_all()
