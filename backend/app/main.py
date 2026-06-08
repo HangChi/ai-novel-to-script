@@ -1,4 +1,5 @@
 import os
+from time import monotonic
 from typing import Any, NoReturn
 
 from fastapi import Body, FastAPI, HTTPException
@@ -12,6 +13,7 @@ from app.ai_provider import (
     get_ai_provider_status_from_env,
     get_default_ai_model_id_from_env,
     is_ai_model_id_supported,
+    normalize_streaming_yaml_preview,
 )
 from app.chapter_parser import ChapterParseError, parse_novel_chapters
 from app.config_file import load_config_files
@@ -142,12 +144,44 @@ def _generate_script_result(
     if progress:
         progress("ai_generating", 55, "正在调用 AI 模型生成剧本。", skeleton_yaml)
 
+    last_stream_update = {
+        "content_length": 0,
+        "sent_at": 0.0,
+    }
+
+    def handle_stream_content(raw_content: str) -> None:
+        if not progress:
+            return
+
+        stream_yaml = normalize_streaming_yaml_preview(raw_content)
+
+        if not stream_yaml:
+            return
+
+        now = monotonic()
+        length_delta = len(stream_yaml) - last_stream_update["content_length"]
+
+        if length_delta < 160 and now - last_stream_update["sent_at"] < 0.2:
+            return
+
+        last_stream_update["content_length"] = len(stream_yaml)
+        last_stream_update["sent_at"] = now
+        estimated_progress = min(84, 55 + len(stream_yaml) // 260)
+        progress(
+            "ai_generating",
+            estimated_progress,
+            "正在接收模型流式输出。",
+            skeleton_yaml,
+            stream_yaml,
+        )
+
     try:
         yaml_text = generate_script_with_ai(
             title=title,
             skeleton_yaml=skeleton_yaml,
             model_id=model_id or None,
             output_language=output_language or None,
+            stream_callback=handle_stream_content if progress else None,
         )
     except AIProviderError as error:
         raise ScriptGenerationError("AI_GENERATION_FAILED", str(error), status_code=502) from error

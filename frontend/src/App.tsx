@@ -66,6 +66,7 @@ type GenerationJobSnapshot = {
   updated_at: string;
   schema_version?: string;
   preview_yaml?: string;
+  stream_yaml?: string;
   yaml?: string;
   error?: GenerationJobError;
 };
@@ -1225,6 +1226,7 @@ function App() {
   const generationEventSourceRef = useRef<EventSource | null>(null);
   const generationFallbackTimerRef = useRef<number | null>(null);
   const generationPreviewYamlRef = useRef<string | null>(null);
+  const generationStreamYamlRef = useRef<string | null>(null);
 
   const characterCount = sourceText.trim().length;
   const chapterCount = countLikelyChapters(sourceText);
@@ -1479,14 +1481,20 @@ function App() {
     setGenerationElapsedSeconds(0);
     setGenerationDisplayedProgress(0);
     generationPreviewYamlRef.current = null;
+    generationStreamYamlRef.current = null;
   }
 
   function handleGenerationJobSnapshot(job: GenerationJobSnapshot, modelLabel: string) {
     setGenerationJob(job);
     setGenerationDisplayedProgress((currentProgress) => Math.max(currentProgress, job.progress));
 
-    if (
+    if (job.stream_yaml && job.status !== "completed" && generationStreamYamlRef.current !== job.stream_yaml) {
+      generationStreamYamlRef.current = job.stream_yaml;
+      updateYamlText(job.stream_yaml, "模型正在流式输出 YAML，结构化视图会随可解析内容同步。");
+      setYamlMode("preview");
+    } else if (
       job.preview_yaml &&
+      !generationStreamYamlRef.current &&
       job.status !== "completed" &&
       generationPreviewYamlRef.current !== job.preview_yaml
     ) {

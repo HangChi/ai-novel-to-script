@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 import json
 import os
 import re
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -45,6 +45,9 @@ Language requirements:
 
 class AIProviderError(RuntimeError):
     pass
+
+
+StreamCallback = Callable[[str], None]
 
 
 class _AIYamlDumper(yaml.SafeDumper):
@@ -176,6 +179,7 @@ class ScriptAIProvider(Protocol):
         title: str,
         skeleton_yaml: str,
         output_language: str = "source language",
+        stream_callback: StreamCallback | None = None,
     ) -> str:
         ...
 
@@ -187,7 +191,11 @@ class LocalScriptAIProvider:
         title: str,
         skeleton_yaml: str,
         output_language: str = "source language",
+        stream_callback: StreamCallback | None = None,
     ) -> str:
+        if stream_callback:
+            stream_callback(skeleton_yaml)
+
         return skeleton_yaml
 
 
@@ -219,6 +227,7 @@ class OpenAICompatibleScriptAIProvider:
         title: str,
         skeleton_yaml: str,
         output_language: str = "source language",
+        stream_callback: StreamCallback | None = None,
     ) -> str:
         messages = [
             {
@@ -235,7 +244,12 @@ class OpenAICompatibleScriptAIProvider:
             },
         ]
         payload = self._build_completion_payload(messages)
-        raw_yaml = _normalize_ai_yaml_response(self._request_completion(payload))
+        raw_response = (
+            self._request_completion_stream(payload, stream_callback)
+            if stream_callback
+            else self._request_completion(payload)
+        )
+        raw_yaml = _normalize_ai_yaml_response(raw_response)
         validation = validate_script_yaml(raw_yaml)
 
         if validation.valid:
@@ -316,6 +330,69 @@ class OpenAICompatibleScriptAIProvider:
 
         return content
 
+    def _request_completion_stream(
+        self,
+        payload: dict[str, Any],
+        stream_callback: StreamCallback,
+    ) -> str:
+        stream_payload = {**payload, "stream": True}
+        request = Request(
+            url=f"{self.base_url.rstrip('/')}/chat/completions",
+            data=json.dumps(stream_payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        chunks: list[str] = []
+
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                for raw_line in response:
+                    line = raw_line.decode("utf-8", errors="replace").strip()
+
+                    if not line or line.startswith(":"):
+                        continue
+
+                    if not line.startswith("data:"):
+                        continue
+
+                    data = line.removeprefix("data:").strip()
+
+                    if data == "[DONE]":
+                        break
+
+                    try:
+                        event_payload = json.loads(data)
+                    except json.JSONDecodeError as error:
+                        raise AIProviderError("AI provider returned invalid stream JSON.") from error
+
+                    delta = _read_stream_delta(event_payload)
+
+                    if not delta:
+                        continue
+
+                    chunks.append(delta)
+                    stream_callback("".join(chunks))
+        except HTTPError as error:
+            detail = _extract_http_error_detail(error)
+            suffix = f" {detail}" if detail else ""
+            raise AIProviderError(
+                f"AI provider returned HTTP {error.code}.{suffix}"
+            ) from error
+        except (TimeoutError, URLError) as error:
+            detail = _extract_request_error_detail(error)
+            suffix = f": {detail}" if detail else ""
+            raise AIProviderError(f"AI provider request failed{suffix}.") from error
+
+        content = "".join(chunks)
+
+        if not content.strip():
+            raise AIProviderError("AI provider returned empty content.")
+
+        return content
+
 
 def _extract_http_error_detail(error: HTTPError) -> str:
     try:
@@ -382,6 +459,39 @@ def _extract_request_error_detail(error: TimeoutError | URLError) -> str:
     return _truncate_error_detail(str(error))
 
 
+def _read_stream_delta(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return ""
+
+    try:
+        choice = payload["choices"][0]
+    except (KeyError, IndexError, TypeError):
+        return ""
+
+    if not isinstance(choice, dict):
+        return ""
+
+    delta = choice.get("delta")
+
+    if isinstance(delta, dict):
+        content = delta.get("content")
+
+        if isinstance(content, str):
+            return content
+
+    message = choice.get("message")
+
+    if isinstance(message, dict):
+        content = message.get("content")
+
+        if isinstance(content, str):
+            return content
+
+    text = choice.get("text")
+
+    return text if isinstance(text, str) else ""
+
+
 def _build_rewrite_prompt(title: str, skeleton_yaml: str, output_language: str) -> str:
     script_title = title.strip() or "Untitled Script"
 
@@ -443,6 +553,33 @@ def _extract_yaml_text(content: str) -> str:
 
 def _normalize_ai_yaml_response(content: str) -> str:
     return _repair_common_utf8_mojibake(_extract_yaml_text(content))
+
+
+def normalize_streaming_yaml_preview(content: str) -> str:
+    text = _repair_common_utf8_mojibake(content).strip()
+
+    if not text:
+        return ""
+
+    if text.startswith("```"):
+        lines = text.splitlines()
+
+        if lines and lines[0].strip().startswith("```"):
+            lines = lines[1:]
+
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+
+        text = "\n".join(lines).strip()
+
+    script_match = ROOT_SCRIPT_PATTERN.search(text)
+
+    if script_match and script_match.start() > 0:
+        text = text[script_match.start() :].strip()
+    elif not script_match:
+        return ""
+
+    return text
 
 
 def _canonicalize_script_yaml(yaml_text: str) -> str:
@@ -810,6 +947,7 @@ def generate_script_with_ai(
     skeleton_yaml: str,
     model_id: str | None = None,
     output_language: str | None = None,
+    stream_callback: StreamCallback | None = None,
 ) -> str:
     resolved_output_language = _resolve_output_language(
         title=title,
@@ -821,4 +959,5 @@ def generate_script_with_ai(
         title=title,
         skeleton_yaml=skeleton_yaml,
         output_language=resolved_output_language,
+        stream_callback=stream_callback,
     )
