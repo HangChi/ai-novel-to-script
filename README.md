@@ -5,6 +5,8 @@
 demo视频.mp4
 链接: https://pan.baidu.com/s/1nfBxY-2P2Z7eLfGETdWAig?pwd=kh2h 提取码: kh2h 复制这段内容后打开百度网盘手机App，操作更方便哦
 
+哔哩哔哩：https://www.bilibili.com/video/BV1ngEK6vEj7/
+
 AI Novel to Script 是一款面向小说作者和编剧的 AI 辅助改编工具。它可以把至少 3 个章节的小说文本转换为结构化剧本 YAML 初稿，并提供结构化预览、局部编辑、Schema 校验、复制和下载能力，帮助作者更快完成从小说叙事到剧本草稿的第一轮整理。
 
 当前版本以本地可复现演示为优先目标：默认 `local` 模式不需要任何 API Key，会返回稳定的 YAML 骨架；填写远程模型密钥后，也可以在页面上选择 DeepSeek-V4-Pro、Kimi-2.6 或 GLM-4.7-FlashX 生成 AI 改编初稿。
