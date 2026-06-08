@@ -22,6 +22,7 @@ class ProgressCallback(Protocol):
         progress: int,
         message: str,
         preview_yaml: str | None = None,
+        stream_yaml: str | None = None,
     ) -> None:
         ...
 
@@ -58,6 +59,7 @@ class GenerationJob:
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     schema_version: str | None = None
     preview_yaml: str | None = None
+    stream_yaml: str | None = None
     yaml: str | None = None
     error: GenerationJobError | None = None
     events: list[GenerationJobEvent] = field(default_factory=list)
@@ -78,6 +80,9 @@ class GenerationJob:
 
         if self.preview_yaml is not None:
             payload["preview_yaml"] = self.preview_yaml
+
+        if self.stream_yaml is not None:
+            payload["stream_yaml"] = self.stream_yaml
 
         if self.yaml is not None:
             payload["yaml"] = self.yaml
@@ -162,12 +167,13 @@ class GenerationJobStore:
     def _run(self, job_id: str, runner: JobRunner) -> None:
         try:
             result = runner(
-                lambda phase, progress, message, preview_yaml=None: self.update(
+                lambda phase, progress, message, preview_yaml=None, stream_yaml=None: self.update(
                     job_id,
                     phase=phase,
                     progress=progress,
                     message=message,
                     preview_yaml=preview_yaml,
+                    stream_yaml=stream_yaml,
                 )
             )
 
@@ -189,6 +195,7 @@ class GenerationJobStore:
         progress: int,
         message: str,
         preview_yaml: str | None = None,
+        stream_yaml: str | None = None,
     ) -> None:
         with self._condition:
             job = self._jobs.get(job_id)
@@ -202,6 +209,8 @@ class GenerationJobStore:
             job.message = message
             if preview_yaml is not None:
                 job.preview_yaml = preview_yaml
+            if stream_yaml is not None:
+                job.stream_yaml = stream_yaml
             job.updated_at = datetime.now(UTC)
             job.events.append(GenerationJobEvent(name="job.status", payload=job.to_dict()))
             self._condition.notify_all()
@@ -220,6 +229,7 @@ class GenerationJobStore:
             job.yaml = yaml_text
             job.schema_version = schema_version
             job.preview_yaml = None
+            job.stream_yaml = None
             job.updated_at = datetime.now(UTC)
             job.events.append(GenerationJobEvent(name="job.completed", payload=job.to_dict()))
             self._condition.notify_all()

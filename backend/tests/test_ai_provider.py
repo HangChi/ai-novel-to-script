@@ -1,4 +1,5 @@
 import io
+import json
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 
@@ -14,6 +15,7 @@ from app.ai_provider import (
     get_ai_model_options_from_env,
     get_default_ai_model_id_from_env,
     get_ai_provider_status_from_env,
+    normalize_streaming_yaml_preview,
 )
 from app.chapter_parser import parse_novel_chapters
 from app.script_draft import build_script_yaml
@@ -446,7 +448,13 @@ def test_generate_script_with_ai_detects_chinese_output_language(monkeypatch: py
     captured = {}
 
     class CapturingProvider:
-        def generate_script_yaml(self, title: str, skeleton_yaml: str, output_language: str = "source language") -> str:
+        def generate_script_yaml(
+            self,
+            title: str,
+            skeleton_yaml: str,
+            output_language: str = "source language",
+            stream_callback=None,
+        ) -> str:
             captured["output_language"] = output_language
             return skeleton_yaml
 
@@ -466,7 +474,13 @@ def test_generate_script_with_ai_keeps_english_as_source_language(monkeypatch: p
     captured = {}
 
     class CapturingProvider:
-        def generate_script_yaml(self, title: str, skeleton_yaml: str, output_language: str = "source language") -> str:
+        def generate_script_yaml(
+            self,
+            title: str,
+            skeleton_yaml: str,
+            output_language: str = "source language",
+            stream_callback=None,
+        ) -> str:
             captured["output_language"] = output_language
             return skeleton_yaml
 
@@ -585,6 +599,60 @@ def _raise_http_error(body: bytes, code: int = 400):
         )
 
     return fake_urlopen
+
+
+class _FakeStreamResponse:
+    def __init__(self, lines: list[str]) -> None:
+        self._lines = lines
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        return None
+
+    def __iter__(self):
+        return iter(line.encode("utf-8") for line in self._lines)
+
+
+def test_openai_provider_streams_completion_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OpenAICompatibleScriptAIProvider(api_key="test-key", model="test-model")
+    valid_yaml = _valid_yaml()
+    chunks = [valid_yaml[:120], valid_yaml[120:]]
+    captured_payload = {}
+
+    def fake_urlopen(request, timeout=None):
+        captured_payload.update(yaml.safe_load(request.data.decode("utf-8")))
+        return _FakeStreamResponse(
+            [
+                *(
+                    "data: "
+                    + json.dumps(
+                        {"choices": [{"delta": {"content": chunk}}]},
+                        ensure_ascii=False,
+                    )
+                    + "\n\n"
+                    for chunk in chunks
+                ),
+                "data: [DONE]\n\n",
+            ]
+        )
+
+    monkeypatch.setattr("app.ai_provider.urlopen", fake_urlopen)
+
+    streamed: list[str] = []
+    result = provider.generate_script_yaml("Rain Letter", "skeleton", stream_callback=streamed.append)
+
+    assert captured_payload["stream"] is True
+    assert streamed == [chunks[0], valid_yaml]
+    assert yaml.safe_load(result)["script"]["title"] == "Rain Letter"
+
+
+def test_normalize_streaming_yaml_preview_waits_for_script_root() -> None:
+    assert normalize_streaming_yaml_preview("```yaml\nscr") == ""
+    assert normalize_streaming_yaml_preview("note\nscript:\n  title: Rain Letter") == (
+        "script:\n  title: Rain Letter"
+    )
 
 
 def test_request_completion_surfaces_openai_style_error_message(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -119,6 +119,7 @@ def test_generate_script_passes_model_id_and_output_language_to_ai_provider(monk
         skeleton_yaml: str,
         model_id: str | None = None,
         output_language: str | None = None,
+        stream_callback=None,
     ) -> str:
         captured["title"] = title
         captured["model_id"] = model_id
@@ -170,6 +171,7 @@ def test_generate_script_reports_ai_provider_failure(monkeypatch) -> None:
         skeleton_yaml: str,
         model_id: str | None = None,
         output_language: str | None = None,
+        stream_callback=None,
     ) -> str:
         raise AIProviderError("provider unavailable")
 
@@ -267,6 +269,7 @@ def test_generate_script_job_preserves_ai_provider_failure(monkeypatch) -> None:
         skeleton_yaml: str,
         model_id: str | None = None,
         output_language: str | None = None,
+        stream_callback=None,
     ) -> str:
         raise AIProviderError("provider unavailable")
 
@@ -291,6 +294,43 @@ def test_generate_script_job_preserves_ai_provider_failure(monkeypatch) -> None:
         "message": "provider unavailable",
     }
     assert yaml.safe_load(job["preview_yaml"])["script"]["title"] == "Rain Letter"
+
+
+def test_generate_script_job_events_stream_yaml_chunks(monkeypatch) -> None:
+    def stream_generation(
+        title: str,
+        skeleton_yaml: str,
+        model_id: str | None = None,
+        output_language: str | None = None,
+        stream_callback=None,
+    ) -> str:
+        if stream_callback:
+            stream_callback("```yaml\nscript:\n  schema_version: \"0.1.0\"\n")
+            stream_callback(skeleton_yaml)
+
+        return skeleton_yaml
+
+    monkeypatch.setattr("app.main.generate_script_with_ai", stream_generation)
+
+    response = client.post(
+        "/api/scripts/generate/jobs",
+        json={
+            "title": "Rain Letter",
+            "content": _novel_text(),
+            "output_format": "yaml",
+            "model_id": "local",
+        },
+    )
+
+    assert response.status_code == 200
+    events_url = response.json()["events_url"]
+
+    with client.stream("GET", events_url) as event_response:
+        assert event_response.status_code == 200
+        body = "".join(event_response.iter_text())
+
+    assert '"stream_yaml"' in body
+    assert "Rain Letter" in body
 
 
 def test_generate_script_job_events_stream_status_and_completed() -> None:
