@@ -67,6 +67,9 @@ type GenerationJobSnapshot = {
   schema_version?: string;
   preview_yaml?: string;
   stream_yaml?: string;
+  streamed_characters?: number;
+  estimated_total_characters?: number;
+  progress_basis?: string;
   yaml?: string;
   error?: GenerationJobError;
 };
@@ -160,16 +163,6 @@ const GENERATION_PHASE_LABELS: Record<string, string> = {
   completed: "已完成",
   failed: "生成失败",
 };
-const GENERATION_PHASE_PROGRESS_CAPS: Record<string, number> = {
-  queued: 8,
-  parsing: 22,
-  building_skeleton: 52,
-  ai_generating: 84,
-  validating: 96,
-  completed: 100,
-  failed: 100,
-};
-
 function countLikelyChapters(text: string) {
   const matches = text.match(/^\s*(?:#{1,6}\s+)?(?:第\s*(?:\d+|[零〇一二两三四五六七八九十百千万]+)\s*[章节回话]|chapter\s+\d+|\d+\s*[.．、]\s*\S)/gim);
 
@@ -208,8 +201,12 @@ function getGenerationPhaseLabel(phase: string) {
   return GENERATION_PHASE_LABELS[phase] ?? phase;
 }
 
+function clampGenerationProgress(progress: number) {
+  return Math.min(100, Math.max(0, Math.round(progress)));
+}
+
 function getGenerationProgressTarget(job: GenerationJobSnapshot) {
-  return Math.max(job.progress, GENERATION_PHASE_PROGRESS_CAPS[job.phase] ?? job.progress);
+  return clampGenerationProgress(job.progress);
 }
 
 function getGenerationProgressStep(currentProgress: number, targetProgress: number) {
@@ -224,6 +221,33 @@ function getGenerationProgressStep(currentProgress: number, targetProgress: numb
   }
 
   return 1;
+}
+
+function formatCharacterCount(value: number) {
+  return new Intl.NumberFormat("zh-CN").format(value);
+}
+
+function getGenerationProgressDetail(job: GenerationJobSnapshot, model: AIModelOptionResponse | null) {
+  if (job.status === "completed") {
+    return `${getAIModelGenerationLabel(model)} · 已完成`;
+  }
+
+  const streamedCharacters = job.streamed_characters ?? 0;
+
+  if (streamedCharacters > 0) {
+    const estimatedTotal = job.estimated_total_characters ?? 0;
+    const totalText = estimatedTotal > streamedCharacters
+      ? ` / 约 ${formatCharacterCount(estimatedTotal)} 字符`
+      : "";
+
+    return `已接收 ${formatCharacterCount(streamedCharacters)}${totalText} 字符`;
+  }
+
+  if (job.phase === "ai_generating" && model?.mode === "remote") {
+    return "等待模型首段输出";
+  }
+
+  return job.progress_basis ?? `实时阶段 · ${getAIModelGenerationLabel(model)}`;
 }
 
 function getApiUrl(pathOrUrl: string) {
@@ -1256,6 +1280,15 @@ function App() {
   const structuredPreview = parseStructuredScriptPreview(yamlText);
   const generationProgressPercent = generationJob ? generationDisplayedProgress : 0;
   const generationPhaseLabel = generationJob ? getGenerationPhaseLabel(generationJob.phase) : "";
+  const generationProgressDetail = generationJob
+    ? getGenerationProgressDetail(generationJob, selectedAIModel)
+    : "";
+  const isGenerationWaitingForStream = Boolean(
+    generationJob &&
+      generationJob.phase === "ai_generating" &&
+      selectedAIModel?.mode === "remote" &&
+      (generationJob.streamed_characters ?? 0) === 0,
+  );
 
   useEffect(() => {
     void checkBackend();
@@ -1486,7 +1519,9 @@ function App() {
 
   function handleGenerationJobSnapshot(job: GenerationJobSnapshot, modelLabel: string) {
     setGenerationJob(job);
-    setGenerationDisplayedProgress((currentProgress) => Math.max(currentProgress, job.progress));
+    setGenerationDisplayedProgress((currentProgress) => Math.max(currentProgress, getGenerationProgressTarget(job)));
+
+    const shouldShowSkeletonPreview = selectedAIModel?.mode !== "remote" || job.status === "failed";
 
     if (job.stream_yaml && job.status !== "completed" && generationStreamYamlRef.current !== job.stream_yaml) {
       generationStreamYamlRef.current = job.stream_yaml;
@@ -1494,6 +1529,7 @@ function App() {
       setYamlMode("preview");
     } else if (
       job.preview_yaml &&
+      shouldShowSkeletonPreview &&
       !generationStreamYamlRef.current &&
       job.status !== "completed" &&
       generationPreviewYamlRef.current !== job.preview_yaml
@@ -1603,6 +1639,11 @@ function App() {
     setImportStatus("idle");
     resetValidationState("生成中，待校验");
     setCopyStatus("idle");
+    if (selectedAIModel?.mode === "remote") {
+      setYamlText(INITIAL_YAML);
+      setStructuredSyncMessage("远程模型已开始生成，等待首段 YAML 输出。");
+      setYamlMode("preview");
+    }
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/scripts/generate/jobs`, {
@@ -1877,7 +1918,7 @@ function App() {
                     <strong>{generationProgressPercent}%</strong>
                   </div>
                   <div
-                    className="generation-progress-track"
+                    className={`generation-progress-track${isGenerationWaitingForStream ? " waiting" : ""}`}
                     role="progressbar"
                     aria-valuemin={0}
                     aria-valuemax={100}
@@ -1887,7 +1928,7 @@ function App() {
                     <span style={{ width: `${generationProgressPercent}%` }} />
                   </div>
                   <div className="generation-progress-detail">
-                    <span>阶段估算 · {getAIModelGenerationLabel(selectedAIModel)}</span>
+                    <span>{generationProgressDetail}</span>
                     <span>{generationElapsedSeconds}s</span>
                   </div>
                 </div>

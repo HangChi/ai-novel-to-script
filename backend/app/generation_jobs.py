@@ -23,6 +23,9 @@ class ProgressCallback(Protocol):
         message: str,
         preview_yaml: str | None = None,
         stream_yaml: str | None = None,
+        streamed_characters: int | None = None,
+        estimated_total_characters: int | None = None,
+        progress_basis: str | None = None,
     ) -> None:
         ...
 
@@ -60,6 +63,9 @@ class GenerationJob:
     schema_version: str | None = None
     preview_yaml: str | None = None
     stream_yaml: str | None = None
+    streamed_characters: int | None = None
+    estimated_total_characters: int | None = None
+    progress_basis: str | None = None
     yaml: str | None = None
     error: GenerationJobError | None = None
     events: list[GenerationJobEvent] = field(default_factory=list)
@@ -83,6 +89,15 @@ class GenerationJob:
 
         if self.stream_yaml is not None:
             payload["stream_yaml"] = self.stream_yaml
+
+        if self.streamed_characters is not None:
+            payload["streamed_characters"] = self.streamed_characters
+
+        if self.estimated_total_characters is not None:
+            payload["estimated_total_characters"] = self.estimated_total_characters
+
+        if self.progress_basis is not None:
+            payload["progress_basis"] = self.progress_basis
 
         if self.yaml is not None:
             payload["yaml"] = self.yaml
@@ -166,16 +181,29 @@ class GenerationJobStore:
 
     def _run(self, job_id: str, runner: JobRunner) -> None:
         try:
-            result = runner(
-                lambda phase, progress, message, preview_yaml=None, stream_yaml=None: self.update(
+            def progress_callback(
+                phase: str,
+                progress: int,
+                message: str,
+                preview_yaml: str | None = None,
+                stream_yaml: str | None = None,
+                streamed_characters: int | None = None,
+                estimated_total_characters: int | None = None,
+                progress_basis: str | None = None,
+            ) -> None:
+                self.update(
                     job_id,
                     phase=phase,
                     progress=progress,
                     message=message,
                     preview_yaml=preview_yaml,
                     stream_yaml=stream_yaml,
+                    streamed_characters=streamed_characters,
+                    estimated_total_characters=estimated_total_characters,
+                    progress_basis=progress_basis,
                 )
-            )
+
+            result = runner(progress_callback)
 
             self.complete(
                 job_id,
@@ -196,6 +224,9 @@ class GenerationJobStore:
         message: str,
         preview_yaml: str | None = None,
         stream_yaml: str | None = None,
+        streamed_characters: int | None = None,
+        estimated_total_characters: int | None = None,
+        progress_basis: str | None = None,
     ) -> None:
         with self._condition:
             job = self._jobs.get(job_id)
@@ -211,6 +242,14 @@ class GenerationJobStore:
                 job.preview_yaml = preview_yaml
             if stream_yaml is not None:
                 job.stream_yaml = stream_yaml
+                if streamed_characters is None:
+                    streamed_characters = len(stream_yaml)
+            if streamed_characters is not None:
+                job.streamed_characters = streamed_characters
+            if estimated_total_characters is not None:
+                job.estimated_total_characters = estimated_total_characters
+            if progress_basis is not None:
+                job.progress_basis = progress_basis
             job.updated_at = datetime.now(UTC)
             job.events.append(GenerationJobEvent(name="job.status", payload=job.to_dict()))
             self._condition.notify_all()
@@ -230,6 +269,10 @@ class GenerationJobStore:
             job.schema_version = schema_version
             job.preview_yaml = None
             job.stream_yaml = None
+            job.streamed_characters = len(yaml_text)
+            if job.estimated_total_characters is None:
+                job.estimated_total_characters = len(yaml_text)
+            job.progress_basis = "生成完成"
             job.updated_at = datetime.now(UTC)
             job.events.append(GenerationJobEvent(name="job.completed", payload=job.to_dict()))
             self._condition.notify_all()
@@ -246,6 +289,7 @@ class GenerationJobStore:
             job.progress = 100
             job.message = message
             job.error = GenerationJobError(code=code, message=message)
+            job.progress_basis = "生成失败"
             job.updated_at = datetime.now(UTC)
             job.events.append(GenerationJobEvent(name="job.failed", payload=job.to_dict()))
             self._condition.notify_all()

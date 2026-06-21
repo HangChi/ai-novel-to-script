@@ -36,6 +36,9 @@ def _build_frontend_dev_origins() -> list[str]:
 
 FRONTEND_DEV_ORIGINS = _build_frontend_dev_origins()
 generation_jobs = GenerationJobStore(max_workers=1)
+AI_GENERATION_START_PROGRESS = 30
+AI_GENERATION_MAX_PROGRESS = 92
+VALIDATION_PROGRESS = 96
 
 app = FastAPI(
     title="AI Novel to Script API",
@@ -112,6 +115,25 @@ def _read_generate_script_request(payload: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _estimate_ai_output_characters(skeleton_yaml: str, chapters_count: int) -> int:
+    skeleton_size = len(skeleton_yaml)
+
+    return max(1200, int(skeleton_size * 1.8), 900 + chapters_count * 650)
+
+
+def _estimate_stream_progress(streamed_characters: int, estimated_total_characters: int) -> int:
+    if streamed_characters <= 0:
+        return AI_GENERATION_START_PROGRESS
+
+    progress_span = AI_GENERATION_MAX_PROGRESS - AI_GENERATION_START_PROGRESS
+    completion_ratio = min(1.0, streamed_characters / estimated_total_characters)
+
+    return min(
+        AI_GENERATION_MAX_PROGRESS,
+        AI_GENERATION_START_PROGRESS + max(1, round(progress_span * completion_ratio)),
+    )
+
+
 def _generate_script_result(
     request_payload: dict[str, str],
     progress: ProgressCallback | None = None,
@@ -129,7 +151,7 @@ def _generate_script_result(
         raise ScriptGenerationError("INVALID_INPUT", "model_id is not supported.")
 
     if progress:
-        progress("parsing", 10, "正在解析章节。")
+        progress("parsing", 6, "正在解析章节。", progress_basis="解析输入")
 
     try:
         chapters = parse_novel_chapters(content)
@@ -137,12 +159,21 @@ def _generate_script_result(
         raise ScriptGenerationError(error.code, error.message) from error
 
     if progress:
-        progress("building_skeleton", 25, "正在构建 YAML 骨架。")
+        progress("building_skeleton", 16, "正在构建 YAML 骨架。", progress_basis="构建本地骨架")
 
     skeleton_yaml = build_script_yaml(title=title, chapters=chapters)
+    estimated_total_characters = _estimate_ai_output_characters(skeleton_yaml, len(chapters))
 
     if progress:
-        progress("ai_generating", 55, "正在调用 AI 模型生成剧本。", skeleton_yaml)
+        progress(
+            "ai_generating",
+            AI_GENERATION_START_PROGRESS,
+            "正在调用 AI 模型生成剧本，等待首段 YAML 输出。",
+            skeleton_yaml,
+            streamed_characters=0,
+            estimated_total_characters=estimated_total_characters,
+            progress_basis="等待模型输出",
+        )
 
     last_stream_update = {
         "content_length": 0,
@@ -161,18 +192,25 @@ def _generate_script_result(
         now = monotonic()
         length_delta = len(stream_yaml) - last_stream_update["content_length"]
 
-        if length_delta < 160 and now - last_stream_update["sent_at"] < 0.2:
+        if length_delta < 40 and now - last_stream_update["sent_at"] < 0.08:
             return
 
         last_stream_update["content_length"] = len(stream_yaml)
         last_stream_update["sent_at"] = now
-        estimated_progress = min(84, 55 + len(stream_yaml) // 260)
+        streamed_characters = len(stream_yaml)
+        estimated_progress = _estimate_stream_progress(
+            streamed_characters,
+            estimated_total_characters,
+        )
         progress(
             "ai_generating",
             estimated_progress,
             "正在接收模型流式输出。",
             skeleton_yaml,
             stream_yaml,
+            streamed_characters=streamed_characters,
+            estimated_total_characters=estimated_total_characters,
+            progress_basis="按模型已输出 YAML 字符估算",
         )
 
     try:
@@ -187,7 +225,14 @@ def _generate_script_result(
         raise ScriptGenerationError("AI_GENERATION_FAILED", str(error), status_code=502) from error
 
     if progress:
-        progress("validating", 85, "正在校验 YAML 结构。")
+        progress(
+            "validating",
+            VALIDATION_PROGRESS,
+            "正在校验 YAML 结构。",
+            streamed_characters=len(yaml_text),
+            estimated_total_characters=estimated_total_characters,
+            progress_basis="校验最终 YAML",
+        )
 
     validation = validate_script_yaml(yaml_text)
 

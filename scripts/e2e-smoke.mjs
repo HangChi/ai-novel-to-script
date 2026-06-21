@@ -280,7 +280,7 @@ async function runBrowserSmoke() {
     await page.waitForFunction(
       () => {
         const progressText = document.querySelector('[data-testid="generation-progress"]')?.textContent ?? "";
-        return progressText.includes("%") && progressText.includes("阶段估算");
+        return progressText.includes("%") && /已完成|已接收|等待模型首段输出|实时阶段/.test(progressText);
       },
       null,
       { timeout: 10_000 },

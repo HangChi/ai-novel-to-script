@@ -330,6 +330,9 @@ def test_generate_script_job_events_stream_yaml_chunks(monkeypatch) -> None:
         body = "".join(event_response.iter_text())
 
     assert '"stream_yaml"' in body
+    assert '"streamed_characters"' in body
+    assert '"estimated_total_characters"' in body
+    assert "按模型已输出 YAML 字符估算" in body
     assert "Rain Letter" in body
 
 

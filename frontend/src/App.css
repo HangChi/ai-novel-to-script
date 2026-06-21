@@ -449,11 +449,25 @@ textarea::placeholder {
 }
 
 .generation-progress-track {
+  position: relative;
   width: 100%;
   height: 7px;
   overflow: hidden;
   border-radius: 999px;
   background: #dfe6ef;
+}
+
+.generation-progress-track.waiting {
+  background:
+    repeating-linear-gradient(
+      115deg,
+      #dfe6ef 0,
+      #dfe6ef 9px,
+      #edf3f8 9px,
+      #edf3f8 18px
+    );
+  background-size: 36px 36px;
+  animation: generation-progress-waiting 900ms linear infinite;
 }
 
 .generation-progress-track span {
@@ -462,6 +476,16 @@ textarea::placeholder {
   border-radius: inherit;
   background: #2c7a65;
   transition: width 520ms ease;
+}
+
+@keyframes generation-progress-waiting {
+  from {
+    background-position: 0 0;
+  }
+
+  to {
+    background-position: 36px 0;
+  }
 }
 
 .generation-controls {
