@@ -152,7 +152,7 @@ def test_create_provider_builds_deepseek_provider_with_defaults(monkeypatch: pyt
     assert provider.model == "deepseek-v4-pro"
     assert provider.base_url == "https://api.deepseek.com"
     assert provider.temperature == 0.3
-    assert provider.timeout_seconds == 60.0
+    assert provider.timeout_seconds == 600.0
     assert provider.provider_name == "deepseek"
     assert provider.api_key_env_name == "DEEPSEEK_API_KEY"
     assert provider.model_env_name == "DEEPSEEK_MODEL"

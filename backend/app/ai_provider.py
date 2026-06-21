@@ -123,6 +123,7 @@ class RemoteAIModelDefinition:
 
 
 LOCAL_AI_MODEL_ID = "local"
+DEFAULT_AI_PROVIDER_TIMEOUT_SECONDS = 600.0
 REMOTE_AI_MODEL_DEFINITIONS = (
     RemoteAIModelDefinition(
         id="deepseek-v4-pro",
@@ -205,7 +206,7 @@ class OpenAICompatibleScriptAIProvider:
     model: str
     base_url: str = "https://api.openai.com/v1"
     temperature: float = 0.3
-    timeout_seconds: float = 60.0
+    timeout_seconds: float = DEFAULT_AI_PROVIDER_TIMEOUT_SECONDS
     provider_name: str = "openai"
     api_key_env_name: str = "OPENAI_API_KEY"
     model_env_name: str = "OPENAI_MODEL"
@@ -850,7 +851,9 @@ def _create_ai_provider_for_model_id(model_id: str) -> ScriptAIProvider:
         model=_read_string_env(definition.model_env_name, definition.default_model),
         base_url=_resolve_remote_base_url(definition),
         temperature=_resolve_remote_temperature(definition),
-        timeout_seconds=_read_float_env("AI_PROVIDER_TIMEOUT_SECONDS", 60.0),
+        timeout_seconds=_read_float_env(
+            "AI_PROVIDER_TIMEOUT_SECONDS", DEFAULT_AI_PROVIDER_TIMEOUT_SECONDS
+        ),
         provider_name=definition.provider,
         api_key_env_name=definition.api_key_env_name,
         model_env_name=definition.model_env_name,
@@ -936,7 +939,9 @@ def create_ai_provider_from_env(model_id: str | None = None) -> ScriptAIProvider
             model=_read_string_env("OPENAI_MODEL"),
             base_url=_read_string_env("OPENAI_BASE_URL", "https://api.openai.com/v1"),
             temperature=_read_float_env("OPENAI_TEMPERATURE", 0.3),
-            timeout_seconds=_read_float_env("AI_PROVIDER_TIMEOUT_SECONDS", 60.0),
+            timeout_seconds=_read_float_env(
+                "AI_PROVIDER_TIMEOUT_SECONDS", DEFAULT_AI_PROVIDER_TIMEOUT_SECONDS
+            ),
         )
 
     raise AIProviderError(f"Unsupported AI_PROVIDER: {provider_name}.")
